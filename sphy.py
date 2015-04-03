@@ -625,7 +625,7 @@ class sphy(pcrm.DynamicModel):
 			self.TotalSnowStore = 0
 		#-Report Rain
 		self.reporting.reporting(self, pcr, 'TotRain', Rain)
-		self.reporting.reporting(self, pcr, 'TotRainF', Rain * RainFrac)
+		self.reporting.reporting(self, pcr, 'TotRainF', Rain * (1-self.GlacFrac))
 		
 		#-Glacier calculations
 		if self.GlacFLAG == 1:
