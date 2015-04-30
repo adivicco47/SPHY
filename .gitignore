@@ -1,0 +1,8 @@
+/dist
+/input
+/output
+/SPHY_README.docx
+/.project
+/.pydevproject
+*.pyc
+/irrigation.py
