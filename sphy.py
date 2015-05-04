@@ -32,8 +32,8 @@ class sphy(pcrm.DynamicModel):
 		self.ResFLAG = config.getint('MODULES','ResFLAG')
 		self.LakeFLAG = config.getint('MODULES','LakeFLAG')
 		self.DynVegFLAG = config.getint('MODULES','DynVegFLAG')
-		self.IrriFLAG = config.getint('MODULES','IrriFLAG')
 		self.GroundFLAG = config.getint('MODULES','GroundFLAG')
+		self.SedFLAG = config.getint('MODULES','SedFLAG')
 		
 		# import the required modules
 		import datetime, calendar, reporting, timecalc, ET, rootzone, subzone
@@ -81,14 +81,14 @@ class sphy(pcrm.DynamicModel):
 			import dynamic_veg # dynamic crop growth using ndvi or kc time-series
 			self.dynamic_veg = dynamic_veg
 			del dynamic_veg
-		if self.IrriFLAG == 1:
-			import irrigation # irrigation module
-			self.irrigation = irrigation
-			del irrigation
 		if self.GroundFLAG == 1:
 			import groundwater # groundwater storage as third storage layer. This is used instead of a fixed bottomflux
 			self.groundwater = groundwater
 			del groundwater
+		if self.SedFLAG == 1:
+			import sediment
+			self.sediment = sediment
+			del sediment
 			
 		#-read the input and output directories from the configuration file
 		self.inpath = config.get('DIRS', 'inputdir')
@@ -104,8 +104,6 @@ class sphy(pcrm.DynamicModel):
 		self.startdate = self.datetime.datetime(sy,sm,sd)
 		self.enddate = self.datetime.datetime(ey,em,ed)
 		
-		#-set the global options
-		pcr.setglobaloption('radians')
 		#-set the 2000 julian date number
 		self.julian_date_2000 = 2451545
 		#-set the option to calculate the fluxes in mm for the upstream area
@@ -122,7 +120,6 @@ class sphy(pcrm.DynamicModel):
 		self.Locations = pcr.readmap(self.inpath + config.get('GENERAL','locations'))
 		
 		#-read soil maps
-		#self.Soil = pcr.readmap(self.inpath + config.get('SOIL','Soil'))
 		self.RootFieldMap = pcr.readmap(self.inpath + config.get('SOIL','RootFieldMap'))
 		self.RootSatMap = pcr.readmap(self.inpath + config.get('SOIL','RootSatMap'))
 		self.RootDryMap = pcr.readmap(self.inpath + config.get('SOIL','RootDryMap'))
@@ -177,12 +174,13 @@ class sphy(pcrm.DynamicModel):
 			self.SoilMax = self.RootSat + self.SubSat
 			self.SoilMin = self.RootDry + self.SubField
 
+		#-read the land use map
+		self.LandUse = pcr.readmap(self.inpath + config.get('LANDUSE','LandUse'))
 		#-read the crop coefficient table if the dynamic vegetation module is not used
 		if self.DynVegFLAG == 0:
 			self.KcStatFLAG = config.getint('LANDUSE', 'KCstatic')
 			if self.KcStatFLAG == 1:
-				#-read land use map and kc table
-				self.LandUse = pcr.readmap(self.inpath + config.get('LANDUSE','LandUse'))
+				#-read kc table
 				self.kc_table = self.inpath + config.get('LANDUSE','CropFac')
 				self.Kc = pcr.lookupscalar(self.kc_table, self.LandUse)
 			else:
@@ -246,9 +244,9 @@ class sphy(pcrm.DynamicModel):
 			#-rout individual flow components?
 			self.RoutComponents = config.getint('ROUTING', 'Rout_components')
 		
-		pcr.setglobaloption('matrixtable')
 		#-read lake maps and parameters if lake module is used
 		if self.LakeFLAG == 1:
+			pcr.setglobaloption('matrixtable')
 			# nominal map with lake IDs
 			self.LakeID = pcr.cover(pcr.readmap(self.inpath + config.get('LAKE','LakeId')), 0)
 			# lookup table with function for each lake (exp, 1-order poly, 2-order poly, 3-order poly)
@@ -291,9 +289,11 @@ class sphy(pcrm.DynamicModel):
 				print 'measured lake levels will be used to update lake storage'
 			except:
 				pass
+			pcr.setglobaloption('columntable')
 			
 		#-read reservior maps and parameters if reservoir module is used
 		if self.ResFLAG == 1:
+			pcr.setglobaloption('matrixtable')
 			# nominal map with reservoir IDs
 			self.ResID = pcr.cover(pcr.readmap(self.inpath + config.get('RESERVOIR','ResId')), 0)
 			# lookup table with operational scheme to use (simple or advanced)
@@ -322,6 +322,29 @@ class sphy(pcrm.DynamicModel):
 				self.ResAdvanced = True
 			except:
 				self.ResAdvanced = False
+			pcr.setglobaloption('columntable')
+				
+		#-read maps and parameters for sediment yield (soil loss)
+		if self.SedFLAG == 1:
+			pars = ['K_USLE', 'C_USLE', 'P_USLE', 'N']
+			for i in pars:
+				try:
+					setattr(self, i, config.getfloat('SEDIMENT', i))
+				except:
+					setattr(self, i, pcr.lookupscalar(self.inpath + config.get('SEDIMENT', i), self.LandUse))
+			self.Rock = pcr.readmap(self.inpath + config.get('SEDIMENT', 'Rock_P'))
+			try:
+				self.Alpha_tc = config.getfloat('SEDIMENT', 'Alpha_tc')
+			except:
+				self.Alpha_tc = pcr.readmap(self.inpath + config.get('SEDIMENT', 'Alpha_tc'))
+			self.LS_USLE = self.sediment.LS_ULSE(self, pcr)
+			self.CFRG = pcr.exp(-0.053 * self.Rock)
+			self.Tc = self.sediment.Tc(self, pcr)
+			self.ha_area = pcr.cellarea() / 10000
+			self.km_area = self.ha_area / 100
+		
+		#-set the global option for radians
+		pcr.setglobaloption('radians')
 	
 	def initial(self):
 
@@ -742,17 +765,18 @@ class sphy(pcrm.DynamicModel):
 			GlacMelt = 0
 			GlacPerc = 0
 		
-		#-Potential evapotranspiration (THIS SHOULD STILL BE IMPROVED WITH DYNAMIC VEGETATION MODULE)
+		#-Potential evapotranspiration
 		ETpot = self.ET.ETpot(ETref, self.Kc) 
 		#-Report ETpot
 		self.reporting.reporting(self, pcr, 'TotETpot', ETpot)
 		self.reporting.reporting(self, pcr, 'TotETpotF', ETpot * RainFrac)
 				
 		#-Rootzone calculations
-		self.RootWater = self.RootWater + pcr.ifthenelse(RainFrac > 0, Rain, 0) + self.CapRise
+		self.RootWater = self.RootWater + self.CapRise
 		#-Rootzone runoff
-		RootRunoff = self.rootzone.RootRunoff(pcr, RainFrac, self.RootWater, self.RootSat)
-		self.RootWater = self.RootWater - RootRunoff
+		tempvar = self.rootzone.RootRunoff(pcr, RainFrac, self.RootWater, self.RootSat, self.RootField, Rain, self.RootKsat)
+		RootRunoff = tempvar[0]
+		self.RootWater = tempvar[1]
 		#-Actual evapotranspiration
 		etreddry = pcr.max(pcr.min((self.RootWater - self.RootDry) / (self.RootWilt - self.RootDry), 1), 0)
 		ETact = self.ET.ETact(pcr, ETpot, self.RootWater, self.RootSat, etreddry, RainFrac)
@@ -792,7 +816,7 @@ class sphy(pcrm.DynamicModel):
 			if self.mm_rep_FLAG == 1 and (self.RoutFLAG == 1 or self.ResFLAG == 1 or self.LakeFLAG == 1):
 				self.SeepSubBasinTSS.sample(pcr.catchmenttotal(self.SeePage, self.FlowDir) / pcr.catchmenttotal(1, self.FlowDir))
 		#-Capillary rise
-		self.CapRise = self.subzone.CapilRise(pcr, etreddry, self.SubField, self.SubSat, self.SubWater, self.CapRiseMax)
+		self.CapRise = self.subzone.CapilRise(pcr, self.SubField, self.SubWater, self.CapRiseMax, self.RootWater, self.RootSat, self.RootField)
 		#-Report capillary rise, corrected for fraction
 		self.reporting.reporting(self, pcr, 'TotCapRF', self.CapRise * (1-self.GlacFrac))
 		#-Update sub soil water content
@@ -857,6 +881,13 @@ class sphy(pcrm.DynamicModel):
 			GWL = self.GWL_base - (SoilRel-0.5) * self.GWL_base
 			#-Report groundwater
 			self.reporting.reporting(self, pcr, 'GWL', GWL)
+			
+		#-Sediment yield
+		if self.SedFLAG == 1:
+			tempvar = self.sediment.q_peak(self, pcr, RootR)
+			Q_surf = tempvar[0]
+			q_peak = tempvar[1]
+			sed = self.sediment.Musle(self, pcr, Q_surf, q_peak)
 		
 		#-Report Total runoff
 		self.reporting.reporting(self, pcr, 'TotRF', self.BaseR + RainR + SnowR + GlacR)

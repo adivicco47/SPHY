@@ -1,7 +1,14 @@
 #-Function to calculate rootzone runoff
-def RootRunoff(pcr, rainfrac, rootwater, rootsat):
-    rootrunoff = pcr.ifthenelse(rainfrac > 0, pcr.max(rootwater - rootsat, 0), 0)
-    return rootrunoff
+def RootRunoff(pcr, rainfrac, rootwater, rootsat, rootfield, rain, rootksat):
+    #-infiltration capacity, scaled based on rootwater content and ksat
+    Infil_cap = rootksat * pcr.max(pcr.min(1, 1 - (rootwater - rootfield)/(rootsat - rootfield)), 0)
+    #-infiltration
+    Infil = pcr.max(0, pcr.min(rain, Infil_cap, rootsat - rootwater))
+    #-Runoff
+    rootrunoff = pcr.ifthenelse(rainfrac > 0, rain - Infil, 0)
+    #-Updated rootwater content
+    rootwater = pcr.ifthenelse(rainfrac > 0, rootwater + Infil, rootwater)
+    return rootrunoff, rootwater
 
 #-Function to calculate rootzone drainage
 def RootDrainage(pcr, rootwater, rootdrain, rootfield, rootsat, drainvel, rootTT):
