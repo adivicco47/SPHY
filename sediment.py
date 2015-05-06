@@ -6,13 +6,13 @@ print 'Sediment module imported'
 def Musle(self, pcr, Q_surf, q_peak):
     sed = 11.8 * (Q_surf * q_peak * self.ha_area)**0.56 * self.K_USLE * self.C_USLE * \
         self.P_USLE * self.LS_USLE * self.CFRG
+    sed = (sed / 10000) * pcr.cellarea()  # conversion to ton / cell area [m2]
     return sed
     
 #-Peak runoff (m3/s)    
 def q_peak(self, pcr, RootRunoff):
-    Q_surf = RootRunoff / self.ha_area   # mm surface runoff per ha
-    q_peak = (self.Alpha_tc * Q_surf * self.km_area) / (3.6 * self.Tc)  # peak runoff in m3/s
-    return Q_surf, q_peak
+    q_peak = (self.Alpha_tc * RootRunoff * pcr.cellarea()) / (3600000 * self.Tc)  # peak runoff in m3/s
+    return q_peak
     
 #-LS topographic factor
 def LS_ULSE(self, pcr):
@@ -33,5 +33,9 @@ def Tc(self, pcr):
     T_ov = 1.44 * (L * self.N)**0.467 * slope_adjusted**-0.235
     Tc = (T_ch + T_ov) / 60  # conversion to hours
     return Tc
-     
-    
+
+#-Routing of sediment
+def SRout(self, pcr, sed):
+    sr = pcr.accuflux(self.FlowDir, sed)
+    sr = (1 - self.kx) * sr + self.kx * self.SYieldRA
+    return sr

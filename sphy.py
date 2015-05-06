@@ -341,7 +341,7 @@ class sphy(pcrm.DynamicModel):
 			self.CFRG = pcr.exp(-0.053 * self.Rock)
 			self.Tc = self.sediment.Tc(self, pcr)
 			self.ha_area = pcr.cellarea() / 10000
-			self.km_area = self.ha_area / 100
+			self.SedRoutFLAG = config.getint('SEDIMENT', 'Sed_ROUT')
 		
 		#-set the global option for radians
 		pcr.setglobaloption('radians')
@@ -516,6 +516,14 @@ class sphy(pcrm.DynamicModel):
 				for i in pars:
 					setattr(self, i + '_FLAG', False)
 		
+		#-Initial routed volume of sediment
+		if self.SedFLAG == 1 and self.RoutFLAG == 1 and self.SedRoutFLAG == 1:
+			try:
+				self.SYieldRA = pcr.readmap(self.inpath + config.get('SEDIMENT', 'Res_init'))
+			except:
+				self.SYieldRA =  config.getfloat('SEDIMENT', 'Res_init')
+
+		
 		#-Initial values for reporting and setting of time-series
 		#-set time-series reporting for mm flux from upstream area for prec and eta 
 		if self.mm_rep_FLAG == 1 and (self.RoutFLAG == 1 or self.ResFLAG == 1 or self.LakeFLAG == 1): 
@@ -570,6 +578,12 @@ class sphy(pcrm.DynamicModel):
 					self.QRAINSubBasinTSS = pcrm.TimeoutputTimeseries("QRAINSubBasinTSS", self, self.Locations, noHeader=False)
 					self.QBASFSubBasinTSS = pcrm.TimeoutputTimeseries("QBASFSubBasinTSS", self, self.Locations, noHeader=False)
 					self.QTOTSubBasinTSS = pcrm.TimeoutputTimeseries("QTOTSubBasinTSS", self, self.Locations, noHeader=False)
+		#-add sediment reporting options to pars if sediment module is used
+		if self.SedFLAG == 1:
+			pars.extend('QPeak', 'SYield')
+			if self.RoutFLAG == 1 and self.SedRoutFLAG == 1:
+				pars.extend('SYieldRA')
+		
 		#-remove routing output from reported list of parameters if these modules are not used			
 		if self.RoutFLAG == 0 and self.ResFLAG == 0 and self.LakeFLAG == 0:
 				rpars = ['RainRAtot','SnowRAtot','GlacRAtot','BaseRAtot','QallRAtot', 'TotStor', 'RainStor', 'SnowStor', 'GlacStor', 'BaseStor']
@@ -589,13 +603,6 @@ class sphy(pcrm.DynamicModel):
 				print i + ' will be reported'
 				fname = config.get('REPORTING', i+'_fname')
 				setattr(self, i+'_fname', fname)
-# 				try:
-# 					setattr(self, i, pcr.readmap(self.inpath + config.get('INITTOT', i)))
-# 				except:
-# 					try:
-# 						setattr(self, i, config.getfloat('INITTOT', i)) 
-# 					except:
-# 						setattr(self, i, 0.)
 				setattr(self, i, 0.)  # use this instead of the commented part above, because it is more logical to always zero as initial condition for reporting
 				if mapoutops != 'NONE':
 					mapoutops = mapoutops.split(",")
@@ -884,10 +891,13 @@ class sphy(pcrm.DynamicModel):
 			
 		#-Sediment yield
 		if self.SedFLAG == 1:
-			tempvar = self.sediment.q_peak(self, pcr, RootR)
-			Q_surf = tempvar[0]
-			q_peak = tempvar[1]
-			sed = self.sediment.Musle(self, pcr, Q_surf, q_peak)
+			q_peak = self.sediment.q_peak(self, pcr, RootR)  #-peak runoff in m3/s
+			sed = self.sediment.Musle(self, pcr, RootR, q_peak) #-sediment yield in ton/cellarea
+			self.reporting.reporting(self, pcr, 'QPeak', q_peak)
+			self.reporting.reporting(self, pcr, 'SYield', sed)
+			if self.RoutFLAG == 1 and self.SedRoutFLAG == 1: #-routing of sediment yield
+				self.SYieldRA = self.sediment.SRout(self, pcr, sed)
+				self.reporting.reporting(self, pcr, 'SYieldRA', self.SYieldRA)
 		
 		#-Report Total runoff
 		self.reporting.reporting(self, pcr, 'TotRF', self.BaseR + RainR + SnowR + GlacR)
