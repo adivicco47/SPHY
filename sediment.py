@@ -28,7 +28,7 @@ def Tc(self, pcr):
     alpha_hill = pcr.atan(slope_adjusted)
     L = pcr.celllength() / pcr.cos(alpha_hill)
     #-Kirpich channel flow time of concentration
-    T_ch = 0.0195 * L**0.77 * slope_adjusted ** -0.385
+    T_ch = 0.0195 * L**0.77 * slope_adjusted**-0.385
     #-Kerby overland flow time of concentration
     T_ov = 1.44 * (L * self.N)**0.467 * slope_adjusted**-0.235
     Tc = (T_ch + T_ov) / 60  # conversion to hours
@@ -37,5 +37,5 @@ def Tc(self, pcr):
 #-Routing of sediment
 def SRout(self, pcr, sed):
     sr = pcr.accuflux(self.FlowDir, sed)
-    sr = (1 - self.kx) * sr + self.kx * self.SYieldRA
+    sr = (1 - self.kx) * sr + self.kx * self.SYieldR
     return sr

@@ -1,7 +1,7 @@
 #***********************************************************************************************
 # THE SPATIAL PROCESSES IN HYDROLOGY (SPHY) MODEL IS DEVELOPED AND OWNED BY FUTUREWATER.
 # AUTHOR: W. Terink
-# DATE LATEST CHANGE: 30-04-2015
+# DATE LATEST CHANGE: 12-05-2015
 # VERSION 2.1
 #***********************************************************************************************
 
@@ -337,9 +337,17 @@ class sphy(pcrm.DynamicModel):
 				self.Alpha_tc = config.getfloat('SEDIMENT', 'Alpha_tc')
 			except:
 				self.Alpha_tc = pcr.readmap(self.inpath + config.get('SEDIMENT', 'Alpha_tc'))
+			pcr.report(pcr.scalar(self.Alpha_tc), self.outpath + 'Alpha_tc.map')
+			try:
+				Labda_Infil = config.getfloat('SEDIMENT', 'Labda_infil')
+			except:
+				Labda_Infil = pcr.readmap(self.inpath + config.get('SEDIMENT', 'Labda_infil'))
 			self.LS_USLE = self.sediment.LS_ULSE(self, pcr)
 			self.CFRG = pcr.exp(-0.053 * self.Rock)
 			self.Tc = self.sediment.Tc(self, pcr)
+			pcr.report(self.Tc, self.outpath + 'Tc.map')
+			self.Infil_alpha = self.Alpha_tc / self.Tc + Labda_Infil  #-parameter that affects the speed in which infiltration capacity decreases.
+			pcr.report(self.Tc, self.outpath + 'Infil_alpha.map')
 			self.ha_area = pcr.cellarea() / 10000
 			self.SedRoutFLAG = config.getint('SEDIMENT', 'Sed_ROUT')
 		
@@ -519,10 +527,10 @@ class sphy(pcrm.DynamicModel):
 		#-Initial routed volume of sediment
 		if self.SedFLAG == 1 and self.RoutFLAG == 1 and self.SedRoutFLAG == 1:
 			try:
-				self.SYieldRA = pcr.readmap(self.inpath + config.get('SEDIMENT', 'Res_init'))
+				self.SYieldR = pcr.readmap(self.inpath + config.get('SEDIMENT', 'Sed_init'))
 			except:
-				self.SYieldRA =  config.getfloat('SEDIMENT', 'Res_init')
-
+				self.SYieldR =  config.getfloat('SEDIMENT', 'Sed_init')
+				
 		
 		#-Initial values for reporting and setting of time-series
 		#-set time-series reporting for mm flux from upstream area for prec and eta 
@@ -580,9 +588,9 @@ class sphy(pcrm.DynamicModel):
 					self.QTOTSubBasinTSS = pcrm.TimeoutputTimeseries("QTOTSubBasinTSS", self, self.Locations, noHeader=False)
 		#-add sediment reporting options to pars if sediment module is used
 		if self.SedFLAG == 1:
-			pars.extend('QPeak', 'SYield')
+			pars.extend(['QPeak', 'SYield'])
 			if self.RoutFLAG == 1 and self.SedRoutFLAG == 1:
-				pars.extend('SYieldRA')
+				pars.extend(['SYieldRA'])
 		
 		#-remove routing output from reported list of parameters if these modules are not used			
 		if self.RoutFLAG == 0 and self.ResFLAG == 0 and self.LakeFLAG == 0:
@@ -781,7 +789,7 @@ class sphy(pcrm.DynamicModel):
 		#-Rootzone calculations
 		self.RootWater = self.RootWater + self.CapRise
 		#-Rootzone runoff
-		tempvar = self.rootzone.RootRunoff(pcr, RainFrac, self.RootWater, self.RootSat, self.RootField, Rain, self.RootKsat)
+		tempvar = self.rootzone.RootRunoff(self, pcr, RainFrac, Rain)
 		RootRunoff = tempvar[0]
 		self.RootWater = tempvar[1]
 		#-Actual evapotranspiration
@@ -896,8 +904,8 @@ class sphy(pcrm.DynamicModel):
 			self.reporting.reporting(self, pcr, 'QPeak', q_peak)
 			self.reporting.reporting(self, pcr, 'SYield', sed)
 			if self.RoutFLAG == 1 and self.SedRoutFLAG == 1: #-routing of sediment yield
-				self.SYieldRA = self.sediment.SRout(self, pcr, sed)
-				self.reporting.reporting(self, pcr, 'SYieldRA', self.SYieldRA)
+				self.SYieldR = self.sediment.SRout(self, pcr, sed)
+				self.reporting.reporting(self, pcr, 'SYieldRA', self.SYieldR)
 		
 		#-Report Total runoff
 		self.reporting.reporting(self, pcr, 'TotRF', self.BaseR + RainR + SnowR + GlacR)
