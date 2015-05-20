@@ -1,8 +1,8 @@
 #***********************************************************************************************
 # THE SPATIAL PROCESSES IN HYDROLOGY (SPHY) MODEL IS DEVELOPED AND OWNED BY FUTUREWATER.
 # AUTHOR: W. Terink
-# DATE LATEST CHANGE: 12-05-2015
-# VERSION 2.1
+# DATE LATEST CHANGE: 20-05-2015
+# VERSION 2.1 - erosion testing
 #***********************************************************************************************
 
 # This model uses the sphy_config.cfg as configuration file.
@@ -22,7 +22,7 @@ class sphy(pcrm.DynamicModel):
 		# Print model info
 		print 	'The Spatial Processes in HYdrology (SPHY) model is ' \
 				'developed and owned by FutureWater, Wageningen, The Netherlands'
-		print   'Version 2.0'
+		print   'Version 2.1 erosion testing'
 		print ' '
 
 		# Read the modules to be used
@@ -220,8 +220,11 @@ class sphy(pcrm.DynamicModel):
 		
 		#-read and set climate forcing and the calculation of etref
 		self.Prec = self.inpath + config.get('CLIMATE','Prec')
-		self.Tair = self.inpath + config.get('CLIMATE','Tair')
 		self.ETREF_FLAG = config.getint('ETREF','ETREF_FLAG')
+		#-only define avg daily temperature maps if glacier, or snow modules are used, or if a etref needs to
+		# be calculated based on Hargreaves
+		if self.SnowFLAG==1 or self.GlacFLAG==1 or self.ETREF_FLAG==0:
+			self.Tair = self.inpath + config.get('CLIMATE','Tair')
 		#-determine the use of a given etref time-series or calculate etref using Hargreaves
 		if self.ETREF_FLAG == 1:
 			self.ETref = self.inpath + config.get('ETREF','ETref')
@@ -669,8 +672,10 @@ class sphy(pcrm.DynamicModel):
 		self.reporting.reporting(self, pcr, 'TotPrec', Precip)
 		self.reporting.reporting(self, pcr, 'TotPrecF', Precip * (1-self.GlacFrac))
 		
-		#-Temperature and reference evapotranspiration
-		Temp = pcr.readmap(pcrm.generateNameT(self.Tair, self.counter))
+		#-Temperature
+		if self.SnowFLAG==1 or self.GlacFLAG==1 or self.ETREF_FLAG==0:
+			Temp = pcr.readmap(pcrm.generateNameT(self.Tair, self.counter))
+		#-Reference evapotranspiration
 		if self.ETREF_FLAG == 0:
 			TempMax = pcr.readmap(pcrm.generateNameT(self.Tmax, self.counter))
 			TempMin = pcr.readmap(pcrm.generateNameT(self.Tmin, self.counter))
