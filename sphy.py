@@ -331,7 +331,7 @@ class sphy(pcrm.DynamicModel):
 				try:
 					setattr(self, i, config.getfloat('SEDIMENT', i))
 				except:
-					setattr(self, i, pcr.lookupscalar(self.inpath + config.get('SEDIMENT', i), self.LandUse))
+					setattr(self, i, pcr.readmap(self.inpath + config.get('SEDIMENT', i)))
 			self.Rock = pcr.readmap(self.inpath + config.get('SEDIMENT', 'Rock_P'))
 			try:
 				self.Alpha_tc = config.getfloat('SEDIMENT', 'Alpha_tc')
