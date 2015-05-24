@@ -22,7 +22,7 @@ class sphy(pcrm.DynamicModel):
 		# Print model info
 		print 	'The Spatial Processes in HYdrology (SPHY) model is ' \
 				'developed and owned by FutureWater, Wageningen, The Netherlands'
-		print   'Version 2.0'
+		print   'Version 2.1'
 		print ' '
 
 		# Read the modules to be used
@@ -81,10 +81,6 @@ class sphy(pcrm.DynamicModel):
 			import dynamic_veg # dynamic crop growth using ndvi or kc time-series
 			self.dynamic_veg = dynamic_veg
 			del dynamic_veg
-		if self.IrriFLAG == 1:
-			import irrigation # irrigation module
-			self.irrigation = irrigation
-			del irrigation
 		if self.GroundFLAG == 1:
 			import groundwater # groundwater storage as third storage layer. This is used instead of a fixed bottomflux
 			self.groundwater = groundwater
