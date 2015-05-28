@@ -1,5 +1,5 @@
 # Spatial Processes in HYdrology (SPHY) model
-Version 2.1
+Version 2.1 (developed by FutureWater)
 
 The Spatial Processes in Hydrology (SPHY) model is a hydrological modeling tool suitable for a wide range of water resource management applications. SPHY is a state-of-the-art, easy to use, robust tool, that can be applied for operational as well as strategic decision support. The SPHY model has been applied and tested in various studies ranging from real-time soil moisture predictions in flat lands, to operational reservoir inflow forecasting applications in mountainous catchments, irrigation scenarios in the Nile Basin, and detailed climate change impact studies in the snow- and glacier-melt dominated the Himalayan region. SPHY is developed by <a href="http://www.futurewater.nl" target="_blank">FutureWater</a> in cooperation with national and international clients and partners.
 
