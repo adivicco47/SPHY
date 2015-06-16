@@ -8,7 +8,7 @@ def Veg_function(pcr, ndvi, fpar_max, fpar_min, lai_max, ndvi_min, ndvi_max, kc_
     FPAR = (SR - SR_min) / (SR_max - SR_min) * (fpar_max - fpar_min)
     LAI = lai_max * pcr.log10(1-FPAR)/pcr.log10(1-fpar_max)
     Smax = 0.935 + 0.498*LAI - 0.00575*(LAI**2)            
-    Kc = kc_min + (kc_max - kc_min) * ((ndvi - ndvi_min)/(ndvi_max - ndvi_min))
+    Kc = kc_min + (kc_max - kc_min) * pcr.max(pcr.min((ndvi - ndvi_min)/(ndvi_max - ndvi_min), 1), 0)
     return Kc, Smax  
 
 #-Function that returns the interception, precipitation throughfall, and remaining storage

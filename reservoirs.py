@@ -1,33 +1,31 @@
 print 'Reservoir module imported'
 
 #-Advanced reservoir     
-def QFracAdv(self, pcr):
+def QAdv(self, pcr):
     DayNo = self.timecalc.julian(self)[0]
     #-determine if it is flood or dry season
     S1 = pcr.ifthenelse(self.ResFlStart < self.ResFlEnd, pcr.ifthenelse(DayNo>=self.ResFlStart, pcr.ifthenelse(DayNo<=self.ResFlEnd, pcr.boolean(1), pcr.boolean(0)), pcr.boolean(0)),\
                         pcr.ifthenelse(DayNo>=self.ResFlEnd, pcr.ifthenelse(DayNo>=self.ResFlStart, pcr.boolean(1), pcr.boolean(0)), pcr.ifthenelse(DayNo<=self.ResFlEnd, \
                         pcr.ifthenelse(DayNo<=self.ResFlStart, pcr.boolean(1), pcr.boolean(0)), pcr.boolean(0))))
 
-    S_avail = pcr.max(self.StorAct - self.ResPVOL, 0)
+    S_avail = pcr.max(self.StorRES - self.ResPVOL, 0)
     Q = pcr.max(pcr.ifthenelse(S1, self.ResMaxFl * S_avail / (self.ResEVOL - self.ResPVOL),\
-        self.ResDemFl * S_avail / (self.ResEVOL - self.ResPVOL)), self.StorAct - self.ResEVOL)
-    Qfrac = Q / self.StorAct
-    return Qfrac
+        self.ResDemFl * S_avail / (self.ResEVOL - self.ResPVOL)), self.StorRES - self.ResEVOL)
+    return Q
 
 #-Simple reservoir    
-def QFracSimple(self, pcr):
-    Q = pcr.max(self.ResKr * self.StorAct * (self.StorAct / self.ResSmax)**1.5, self.StorAct - self.ResSmax)
-    Qfrac = Q / self.StorAct
-    return Qfrac
+def QSimple(self, pcr):
+    Q = pcr.max(self.ResKr * self.StorRES * (self.StorRES / self.ResSmax)**1.5, self.StorRES - self.ResSmax)
+    return Q
     
-#-Calculates the fraction to release, depending on the type of reservoir (simple or advanced)    
-def QFrac(self, pcr):
+#-Calculates reservoir outflow and the fraction to release, depending on the type of reservoir (simple or advanced)    
+def QRes(self, pcr):
     if self.ResSimple and self.ResAdvanced:
-        Qfrac = pcr.ifthenelse(self.ResFunc==1, QFracSimple(self, pcr), pcr.ifthenelse(self.ResFunc==2,\
-        QFracAdv(self, pcr), 1 - self.kx))
+        Qout = pcr.ifthenelse(self.ResFunc==1, QSimple(self, pcr), pcr.ifthenelse(self.ResFunc==2,\
+        QAdv(self, pcr), 0))
     elif self.ResSimple:
-        Qfrac = pcr.ifthenelse(self.ResFunc==1, QFracSimple(self, pcr), 1 - self.kx)
+        Qout = pcr.ifthenelse(self.ResFunc==1, QSimple(self, pcr), 0)
     else:
-        Qfrac = pcr.ifthenelse(self.ResFunc==2, QFracAdv(self, pcr), 1 - self.kx)
-    Qfrac = pcr.max(pcr.min(Qfrac, 1), 0)
-    return Qfrac
+        Qout = pcr.ifthenelse(self.ResFunc==2, QAdv(self, pcr), 0)
+    
+    return Qout

@@ -6,3 +6,4 @@
 /.pydevproject
 *.pyc
 /irrigation.py
+*.xlsx
