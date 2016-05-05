@@ -12,31 +12,28 @@ def REPM(self, pcr, tot, var, fname, outops, TSS=False, MAP=False):
             dim[1] = 29
         else:
             dim[1] = 28
-        if self.curdate.day != dim[self.curdate.month-1]:
-            tot = tot + var
-        else:
+        tot = tot + var
+        if self.curdate.day == dim[self.curdate.month-1]:
             if TSS:
                 TSS.sample(tot)
             if MAP:
                 self.report(tot, self.outpath + fname + 'M')
-            tot = 0    
+            tot = 0
     elif outops == 'Year':
         if self.calendar.isleap(self.curdate.year):
             ydays = 366
         else:
             ydays = 365
-        if self.timecalc.julian(self)[0] != ydays:
-            tot = tot + var
-        else:
+        tot = tot + var
+        if self.timecalc.julian(self)[0] == ydays:
             if TSS:
                 TSS.sample(tot)
             if MAP:
                 self.report(tot, self.outpath + fname + 'Y')
-            tot = 0    
+            tot = 0
     else:
-        if self.curdate != self.enddate:
-            tot = tot + var
-        else:
+        tot = tot + var
+        if self.curdate == self.enddate:
             pcr.report(tot, self.outpath + fname + '.map')
             tot = 0
     return tot
