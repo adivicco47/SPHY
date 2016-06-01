@@ -99,6 +99,12 @@ class sphy(pcrm.DynamicModel):
 		self.startdate = self.datetime.datetime(sy,sm,sd)
 		self.enddate = self.datetime.datetime(ey,em,ed)
 		
+		#-get start date of first forcing file in forcing directory
+		syF = config.getint('TIMING', 'startyear_F')
+		smF = config.getint('TIMING', 'startmonth_F')
+		sdF = config.getint('TIMING', 'startday_F')
+		self.startdateF = self.datetime.datetime(syF, smF, sdF)
+		
 		#-set the global options
 		pcr.setglobaloption('radians')
 		#-set the 2000 julian date number
@@ -319,8 +325,9 @@ class sphy(pcrm.DynamicModel):
 	def initial(self):
 
 		#-initial section
-		#-timer
-		self.counter = 0
+		#-get the correct forcing file number, depending on the start date of your simulation
+		#-and the start date of the first forcing file in your forcing directory.
+		self.counter = (self.startdate - self.startdateF).days
 		#-initial date
 		self.curdate = self.startdate
 		
@@ -643,6 +650,8 @@ class sphy(pcrm.DynamicModel):
 		self.counter+=1
 		print str(self.curdate.day)+'-'+str(self.curdate.month)+'-'+str(self.curdate.year)+'  t = '+str(self.counter)
 			
+		print self.counter
+		exit(0)
 		# Snow and glacier fraction settings
 		if self.GlacFLAG == 0:
 			self.GlacFrac = 0
