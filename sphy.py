@@ -649,9 +649,7 @@ class sphy(pcrm.DynamicModel):
 	def dynamic(self):
 		self.counter+=1
 		print str(self.curdate.day)+'-'+str(self.curdate.month)+'-'+str(self.curdate.year)+'  t = '+str(self.counter)
-			
-		print self.counter
-		exit(0)
+
 		# Snow and glacier fraction settings
 		if self.GlacFLAG == 0:
 			self.GlacFrac = 0
