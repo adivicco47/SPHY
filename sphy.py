@@ -8,6 +8,7 @@
 # This model uses the sphy_config.cfg as configuration file.
 
 import time, shutil, os, glob, ConfigParser
+import pandas as pd
 import pcraster as pcr
 import pcraster.framework as pcrm
 
@@ -203,6 +204,11 @@ class sphy(pcrm.DynamicModel):
 			
 		#-read and set glacier maps and parameters if glacier module is used
 		if self.GlacFLAG == 1:
+			#glactable = pd.read_csv(os.path.join(self.inpath, config.get('GLACIER', 'GlacTable')))
+			#print glactable
+			
+			exit(0)
+			
 			self.GlacFracCI = pcr.readmap(self.inpath + config.get('GLACIER','GlacFracCI'))
 			self.GlacFracDB = pcr.readmap(self.inpath + config.get('GLACIER','GlacFracDB'))
 			pars = ['DDFG','DDFDG','GlacF']
