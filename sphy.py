@@ -777,6 +777,7 @@ class sphy(pcrm.DynamicModel):
 			self.GlacTable['ActSnowMelt_GLAC'] = pcr.numpy.minimum(self.GlacTable['SnowStore_GLAC'], self.GlacTable['PotSnowMelt_GLAC'])
 			#-Update snow store
 			
+			snowstore = snowstore + snow - actmelt + pcr.ifthenelse(temp < 0, pcr.scalar(snowwatstore), 0)
 
 
 			
