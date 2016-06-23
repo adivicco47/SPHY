@@ -773,8 +773,8 @@ class sphy(pcrm.DynamicModel):
 			#-update table with model cel precipitation
 			self.GlacTable.update(P)
 			P = None; P_1d = None; del P, P_1d
-			#-correct precipitation for glacier fraction
-			self.GlacTable['Prec_GLAC'] = self.GlacTable['Prec_GLAC'] * self.GlacTable['FRAC_GLAC']  #-Correct precipitation for glacier fraction
+# 			#-correct precipitation for glacier fraction
+# 			self.GlacTable['Prec_GLAC'] = self.GlacTable['Prec_GLAC'] * self.GlacTable['FRAC_GLAC']  #-Correct precipitation for glacier fraction
 			#-Snow and rain differentiation
 			self.GlacTable['Rain_GLAC'] = 0; self.GlacTable['Snow_GLAC'] = 0; 
 			mask = self.GlacTable['GLAC_T'] >= self.Tcrit
