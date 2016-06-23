@@ -212,7 +212,7 @@ class sphy(pcrm.DynamicModel):
 			#-Table with glaciers properties (U_ID, MOD_ID, GLAC_H, etc.)
 			self.GlacTable = pd.read_csv(os.path.join(self.inpath, config.get('GLACIER', 'GlacTable')))#,dtype={'U_ID':pcr.numpy.int16, 'MOD_ID':pcr.numpy.int16, 'GLAC_ID':pcr.numpy.int16})
 			cols = pd.DataFrame(columns=['MOD_T', 'GLAC_T', 'Prec_GLAC', 'Rain_GLAC', 'Snow_GLAC', 'PotSnowMelt_GLAC',\
-										'ActSnowMelt_GLAC', 'SnowStore_GLAC', 'OldSnowWatStore_GLAC', 'SnowWatStore_GLAC',\
+										'ActSnowMelt_GLAC', 'OldSnowStore_GLAC', 'SnowStore_GLAC', 'OldSnowWatStore_GLAC', 'SnowWatStore_GLAC',\
 										'MaxSnowWatStore_GLAC', 'OldTotalSnowStore_GLAC', 'TotalSnowStore_GLAC',\
 										'SnowR_GLAC', 'RainR_GLAC', 'GlacMelt', 'GlacR', 'GlacPerc'])
 			self.GlacTable = pd.concat([self.GlacTable, cols], axis=1).fillna(0)
@@ -458,6 +458,8 @@ class sphy(pcrm.DynamicModel):
 				S = None; SnowWatStore_1d = None; del S, SnowWatStore_1d
 			except:
 				self.GlacTable['SnowWatStore_GLAC'] = self.SnowWatStore
+			self.GlacTable['TotalSnowStore_GLAC']  = self.GlacTable['SnowStore_GLAC'] + self.GlacTable['SnowWatStore_GLAC']
+			
 			#-initialize the glacier fraction
 			self.GlacFrac = pcr.numpy.zeros(self.ModelID_1d.shape)
 			self.GlacFrac[self.GlacTrue] = self.GlacTable.groupby(self.GlacTable.index).sum()['FRAC_GLAC']
@@ -759,6 +761,9 @@ class sphy(pcrm.DynamicModel):
 			T = None; T_1d = None; del T, T_1d
 			#-lapse temperature for glaciers
 			self.GlacTable['GLAC_T'] = self.GlacTable['MOD_T'] - (self.GlacTable['MOD_H'] - self.GlacTable['GLAC_H']) * self.TLapse
+			
+			self.GlacTable['GLAC_T'] = self.GlacTable['GLAC_T'] + 15 ###### DUMMY TO HIGH VALUE FOR TESTIGN -> REMOVE THIS LINE LATER
+			
 			#-1 dim array of Precip map
 			P_1d = pcr.pcr2numpy(Precip, -9999).flatten()  	
 			P = pd.DataFrame(data={'Prec_GLAC': P_1d[self.GlacTrue]}, index=self.ModelID_1d[self.GlacTrue])
@@ -767,24 +772,77 @@ class sphy(pcrm.DynamicModel):
 			P = None; P_1d = None; del P, P_1d
 			#-correct precipitation for glacier fraction
 			self.GlacTable['Prec_GLAC'] = self.GlacTable['Prec_GLAC'] * self.GlacTable['FRAC_GLAC']  #-Correct precipitation for glacier fraction
-			self.GlacTable.iloc[0,7] = 10  ###### 1 RECORD SET TO HIGH VALUE FOR TESTIGN -> REMOVE THIS LINE LATER
 			#-Snow and rain differentiation
-			self.GlacTable.loc[self.GlacTable['GLAC_T'] >= self.Tcrit, 'Rain_GLAC'] = self.GlacTable.loc[self.GlacTable['GLAC_T'] >= self.Tcrit, 'Prec_GLAC'] 
-			self.GlacTable.loc[self.GlacTable['GLAC_T'] < self.Tcrit, 'Snow_GLAC'] = self.GlacTable.loc[self.GlacTable['GLAC_T'] < self.Tcrit, 'Prec_GLAC']
+			self.GlacTable['Rain_GLAC'] = 0; self.GlacTable['Snow_GLAC'] = 0; 
+			mask = self.GlacTable['GLAC_T'] >= self.Tcrit
+			self.GlacTable.loc[mask, 'Rain_GLAC'] = self.GlacTable.loc[mask, 'Prec_GLAC'] 
+			self.GlacTable.loc[pcr.numpy.invert(mask), 'Snow_GLAC'] = self.GlacTable.loc[pcr.numpy.invert(mask), 'Prec_GLAC']
+			#-Set the melting temperature (=>0)
+			Tmelt = pcr.numpy.maximum(self.GlacTable['GLAC_T'], 0)
 			#-Snow melt
-			self.GlacTable['PotSnowMelt_GLAC'] = pcr.numpy.maximum(self.GlacTable['GLAC_T'], 0) * self.DDFS
-			self.GlacTable.iloc[0,13] = 100  ###### 1 RECORD SET TO HIGH VALUE FOR TESTIGN -> REMOVE THIS LINE LATER
+			self.GlacTable['PotSnowMelt_GLAC'] = Tmelt * self.DDFS
 			self.GlacTable['ActSnowMelt_GLAC'] = pcr.numpy.minimum(self.GlacTable['SnowStore_GLAC'], self.GlacTable['PotSnowMelt_GLAC'])
 			#-Update snow store
-			
-			snowstore = snowstore + snow - actmelt + pcr.ifthenelse(temp < 0, pcr.scalar(snowwatstore), 0)
+			self.GlacTable['OldSnowStore_GLAC'] = self.GlacTable['SnowStore_GLAC'] 
+			self.GlacTable['SnowStore_GLAC'] = self.GlacTable['SnowStore_GLAC'] + self.GlacTable['Snow_GLAC'] - self.GlacTable['ActSnowMelt_GLAC']
+			self.GlacTable.loc[self.GlacTable['GLAC_T'] < 0., 'SnowStore_GLAC'] = self.GlacTable.loc[self.GlacTable['GLAC_T'] < 0., 'SnowStore_GLAC'] + \
+				self.GlacTable.loc[self.GlacTable['GLAC_T'] < 0., 'SnowWatStore_GLAC']
+			#-Caclulate the maximum amount of water that can be stored in snowwatstore
+			self.GlacTable['MaxSnowWatStore_GLAC'] = self.SnowSC * self.GlacTable['SnowStore_GLAC']
+			self.GlacTable['OldSnowWatStore_GLAC'] = self.GlacTable['SnowWatStore_GLAC']
+			#-Calculate the actual amount of water stored in snowwatstore
+			self.GlacTable['SnowWatStore_GLAC'] = pcr.numpy.minimum(self.GlacTable['MaxSnowWatStore_GLAC'], self.GlacTable['SnowWatStore_GLAC'] +\
+				self.GlacTable['ActSnowMelt_GLAC'] + self.GlacTable['Rain_GLAC'])
+			self.GlacTable.loc[self.GlacTable['GLAC_T'] < 0., 'SnowWatStore_GLAC'] = 0
+			#-Changes in total water storage in snow (SnowStore and SnowWatStore)
+			self.GlacTable['OldTotalSnowStore_GLAC'] = self.GlacTable['TotalSnowStore_GLAC']
+			self.GlacTable['TotalSnowStore_GLAC'] = self.GlacTable['SnowStore_GLAC'] + self.GlacTable['SnowWatStore_GLAC']
+			#-Snow runoff
+			mask = (self.GlacTable['SnowWatStore_GLAC'] == self.GlacTable['MaxSnowWatStore_GLAC']) & (self.GlacTable['OldSnowStore_GLAC'] > 0.) #-mask with true where SnowWatStore_GLAC == MaxSnowWatStore_GLAC 
+			self.GlacTable.loc[mask,'SnowR_GLAC'] = self.GlacTable.loc[mask, 'ActSnowMelt_GLAC'] + self.GlacTable.loc[mask, 'Rain_GLAC'] - \
+				(self.GlacTable.loc[mask, 'SnowWatStore_GLAC'] - self.GlacTable.loc[mask, 'OldSnowWatStore_GLAC'])
+			self.GlacTable.loc[pcr.numpy.invert(mask), 'SnowR_GLAC'] = 0
+			mask = None; del mask
 
-
+			#-Glacier melt
+			self.GlacTable['GlacMelt'] = 0   #-first set to 0 then update hereafter
+			#-Masks for full glacier melt (=no snow melt in timestep) and partial glacier melt (=where snowpack is fully melted within timestep)
+			partialMelt = (self.GlacTable['OldSnowStore_GLAC'] > 0.) & (self.GlacTable['SnowStore_GLAC'] == 0)  #-mask with true where snowpack has melted within timestep: for these cells also partial glacier melt
+			fullMelt = (self.GlacTable['OldSnowStore_GLAC'] == 0) & (self.GlacTable['SnowStore_GLAC'] == 0)
+			#-Masks for debris and clean ice
+			CImask = self.GlacTable['DEBRIS'] == 0
+			DBmask = pcr.numpy.invert(CImask)
+			#-Melt from Clean Ice Glaciers
+			mask = (partialMelt & CImask)  #-mask for Clean Ice glacier and partial melt
+			self.GlacTable.loc[mask, 'GlacMelt'] = pcr.numpy.maximum(self.GlacTable.loc[mask, 'GLAC_T'] - (self.GlacTable.loc[mask, 'OldSnowStore_GLAC'] / self.DDFS), 0) * self.DDFG
+			mask = (fullMelt & CImask)  #-mask for Clean Ice glacier and full melt
+			self.GlacTable.loc[mask, 'GlacMelt'] = Tmelt.loc[mask] * self.DDFG
+			#-Melt from Debris Covered Glaciers
+			mask = (partialMelt & DBmask)  #-mask for Debris covered Glacier and partial melt
+			self.GlacTable.loc[mask, 'GlacMelt'] = pcr.numpy.maximum(self.GlacTable.loc[mask, 'GLAC_T'] - (self.GlacTable.loc[mask, 'OldSnowStore_GLAC'] / self.DDFS), 0) * self.DDFDG
+			mask = (fullMelt & DBmask)  #-mask for Debris covered Glacier and full melt
+			self.GlacTable.loc[mask, 'GlacMelt'] = Tmelt.loc[mask] * self.DDFDG
 			
+# 			#-Glacier runoff
+# 			GlacR = self.glacier.GlacR(self.GlacF, GlacMelt, self.GlacFrac)
+# 			#-Report glacier runoff
+# 			self.reporting.reporting(self, pcr, 'TotGlacRF', GlacR)
+# 			#-Glacier percolation to groundwater
+# 			GlacPerc = self.glacier.GPerc(self.GlacF, GlacMelt, self.GlacFrac)
+# 			#-Report glacier percolation to groundwater
+# 			self.reporting.reporting(self, pcr, 'TotGlacPercF', GlacPerc)
+			
+		if self.counter == 10:
 			self.GlacTable.to_csv(self.outpath + 'out.csv')
+			exit(0)	
+
+			
+		
 			
 # 			print self.GlacTable
-		exit(0)
+
+		
+
 
 
 
