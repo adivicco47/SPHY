@@ -466,6 +466,9 @@ class sphy(pcrm.DynamicModel):
 			self.GlacFrac = self.GlacFrac.reshape(self.ModelID.shape)
 			self.GlacFrac = pcr.numpy2pcr(Scalar, self.GlacFrac, -9999)
 			pcr.report(self.GlacFrac, self.outpath + 'glacfrac.map')
+			#-Masks for debris and clean ice
+			self.CImask = self.GlacTable['DEBRIS'] == 0
+			self.DBmask = pcr.numpy.invert(self.CImask)
 		else:
 			self.GlacFrac = 0
 			
@@ -809,18 +812,15 @@ class sphy(pcrm.DynamicModel):
 			#-Masks for full glacier melt (=no snow melt in timestep) and partial glacier melt (=where snowpack is fully melted within timestep)
 			partialMelt = (self.GlacTable['OldSnowStore_GLAC'] > 0.) & (self.GlacTable['SnowStore_GLAC'] == 0)  #-mask with true where snowpack has melted within timestep: for these cells also partial glacier melt
 			fullMelt = (self.GlacTable['OldSnowStore_GLAC'] == 0) & (self.GlacTable['SnowStore_GLAC'] == 0)
-			#-Masks for debris and clean ice
-			CImask = self.GlacTable['DEBRIS'] == 0
-			DBmask = pcr.numpy.invert(CImask)
 			#-Melt from Clean Ice Glaciers
-			mask = (partialMelt & CImask)  #-mask for Clean Ice glacier and partial melt
+			mask = (partialMelt & self.CImask)  #-mask for Clean Ice glacier and partial melt
 			self.GlacTable.loc[mask, 'GlacMelt'] = pcr.numpy.maximum(self.GlacTable.loc[mask, 'GLAC_T'] - (self.GlacTable.loc[mask, 'OldSnowStore_GLAC'] / self.DDFS), 0) * self.DDFG
-			mask = (fullMelt & CImask)  #-mask for Clean Ice glacier and full melt
+			mask = (fullMelt & self.CImask)  #-mask for Clean Ice glacier and full melt
 			self.GlacTable.loc[mask, 'GlacMelt'] = Tmelt.loc[mask] * self.DDFG
 			#-Melt from Debris Covered Glaciers
-			mask = (partialMelt & DBmask)  #-mask for Debris covered Glacier and partial melt
+			mask = (partialMelt & self.DBmask)  #-mask for Debris covered Glacier and partial melt
 			self.GlacTable.loc[mask, 'GlacMelt'] = pcr.numpy.maximum(self.GlacTable.loc[mask, 'GLAC_T'] - (self.GlacTable.loc[mask, 'OldSnowStore_GLAC'] / self.DDFS), 0) * self.DDFDG
-			mask = (fullMelt & DBmask)  #-mask for Debris covered Glacier and full melt
+			mask = (fullMelt & self.DBmask)  #-mask for Debris covered Glacier and full melt
 			self.GlacTable.loc[mask, 'GlacMelt'] = Tmelt.loc[mask] * self.DDFDG
 			
 # 			#-Glacier runoff
