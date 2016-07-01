@@ -11,13 +11,9 @@ import time, shutil, os, glob, ConfigParser
 import pandas as pd
 import pcraster as pcr
 import pcraster.framework as pcrm
-from pcraster._pcraster import Boolean, Scalar, Nominal
+from pcraster._pcraster import Scalar
 
 tic = time.clock()
-
-
-
-
 
 # Read the model configuration file
 config = ConfigParser.RawConfigParser()
@@ -121,7 +117,7 @@ class sphy(pcrm.DynamicModel):
 		#-setting clone map
 		clonemap = self.inpath + config.get('GENERAL','mask')
 		pcr.setclone(clonemap)
-		self.clone = pcr.readmap(clonemap)
+		self.clone = pcr.ifthen(pcr.readmap(clonemap), pcr.boolean(1))
 		
 		#-read general maps
 		self.DEM = pcr.readmap(self.inpath + config.get('GENERAL','dem'))
@@ -129,7 +125,6 @@ class sphy(pcrm.DynamicModel):
 		self.Locations = pcr.readmap(self.inpath + config.get('GENERAL','locations'))
 		
 		#-read soil maps
-		#self.Soil = pcr.readmap(self.inpath + config.get('SOIL','Soil'))
 		self.RootFieldMap = pcr.readmap(self.inpath + config.get('SOIL','RootFieldMap'))
 		self.RootSatMap = pcr.readmap(self.inpath + config.get('SOIL','RootSatMap'))
 		self.RootDryMap = pcr.readmap(self.inpath + config.get('SOIL','RootDryMap'))
@@ -209,18 +204,18 @@ class sphy(pcrm.DynamicModel):
 			
 		#-read and set glacier maps and parameters if glacier module is used
 		if self.GlacFLAG:
-			#-Table with glaciers properties (U_ID, MOD_ID, GLAC_H, etc.)
-			self.GlacTable = pd.read_csv(os.path.join(self.inpath, config.get('GLACIER', 'GlacTable')))#,dtype={'U_ID':pcr.numpy.int16, 'MOD_ID':pcr.numpy.int16, 'GLAC_ID':pcr.numpy.int16})
+			#-Table with glaciers properties (U_ID,MOD_ID,GLAC_ID,MOD_H,GLAC_H,DEBRIS,FRAC_GLAC)
+			self.GlacTable = pd.read_csv(os.path.join(self.inpath, config.get('GLACIER', 'GlacTable')))
 			cols = pd.DataFrame(columns=['MOD_T', 'GLAC_T', 'Prec_GLAC', 'Rain_GLAC', 'Snow_GLAC', 'PotSnowMelt_GLAC',\
 										'ActSnowMelt_GLAC', 'OldSnowStore_GLAC', 'SnowStore_GLAC', 'OldSnowWatStore_GLAC', 'SnowWatStore_GLAC',\
 										'MaxSnowWatStore_GLAC', 'OldTotalSnowStore_GLAC', 'TotalSnowStore_GLAC',\
-										'SnowR_GLAC', 'RainR_GLAC', 'GlacMelt', 'GlacR', 'GlacPerc'])
+										'SnowR_GLAC', 'GlacMelt', 'GlacR', 'GlacPerc'])
 			self.GlacTable = pd.concat([self.GlacTable, cols], axis=1).fillna(0)
 			#-Read the glacier maps
-			self.GlacID = pcr.pcr2numpy(pcr.readmap(os.path.join(self.inpath, config.get('GLACIER', 'GlacID'))), -9999)  #-Nominal
+# 			self.GlacID = pcr.pcr2numpy(pcr.readmap(os.path.join(self.inpath, config.get('GLACIER', 'GlacID'))), -9999)  #-Nominal   ->> NOT USED YET
 			self.ModelID = pcr.pcr2numpy(pcr.readmap(os.path.join(self.inpath, config.get('GLACIER', 'ModelID'))), -9999) #-Nominal
 			self.ModelID_1d = self.ModelID.flatten()	#-1 dim array with model cell IDs
-			self.DebrisMask = pcr.pcr2numpy(pcr.readmap(os.path.join(self.inpath, config.get('GLACIER', 'DebrisMask'))), -9999)	#-Nominal
+# 			self.DebrisMask = pcr.pcr2numpy(pcr.readmap(os.path.join(self.inpath, config.get('GLACIER', 'DebrisMask'))), -9999)	#-Nominal  ->NOT USED YET
 			SelModelID = pd.unique(self.GlacTable['MOD_ID'])  #-model id cells for which to extract temperature, precip, etc. (=cells that have glaciers)
 			self.GlacTrue = pcr.numpy.in1d(self.ModelID_1d, SelModelID)   #-positions in ModelID_1d where glacier is present
 			#-Read the glacier parameters
@@ -465,8 +460,9 @@ class sphy(pcrm.DynamicModel):
 			self.GlacFrac[self.GlacTrue] = self.GlacTable.groupby(self.GlacTable.index).sum()['FRAC_GLAC']
 			self.GlacFrac = self.GlacFrac.reshape(self.ModelID.shape)
 			self.GlacFrac = pcr.numpy2pcr(Scalar, self.GlacFrac, -9999)
+			self.GlacFrac = pcr.ifthen(self.clone, self.GlacFrac)  #-only use values where clone is True
 			pcr.report(self.GlacFrac, self.outpath + 'glacfrac.map')
-			#-Masks for debris and clean ice
+			# 1-D Masks for debris and clean ice
 			self.CImask = self.GlacTable['DEBRIS'] == 0
 			self.DBmask = pcr.numpy.invert(self.CImask)
 		else:
@@ -616,7 +612,7 @@ class sphy(pcrm.DynamicModel):
 				print i + ' will be reported'
 				fname = config.get('REPORTING', i+'_fname')
 				setattr(self, i+'_fname', fname)
-				setattr(self, i, 0.)  # use this instead of the commented part above, because it is more logical to always zero as initial condition for reporting
+				setattr(self, i, 0.)
 				if mapoutops != 'NONE':
 					mapoutops = mapoutops.split(",")
 					for j in mapoutops:
@@ -692,18 +688,19 @@ class sphy(pcrm.DynamicModel):
 		self.counter+=1
 		print str(self.curdate.day)+'-'+str(self.curdate.month)+'-'+str(self.curdate.year)+'  t = '+str(self.counter)
 
-		# Snow and glacier fraction settings
+		# Snow and rain fraction settings for non-glacier part of model cel
 		SnowFrac = pcr.ifthenelse(self.SnowStore > 0, pcr.scalar(1 - self.GlacFrac), 0)
 		RainFrac = pcr.ifthenelse(self.SnowStore == 0, pcr.scalar(1 - self.GlacFrac), 0)
 		
 		pcr.report(SnowFrac, self.outpath + 'snowfrac.map')
 		pcr.report(RainFrac, self.outpath + 'rainfrac.map')
-			
+
 		#-Read the precipitation time-series
 		Precip = pcr.readmap(pcrm.generateNameT(self.Prec, self.counter))
-		#-Report Precip  (#####MAYBE REMOVE THE FRACTIONAL REPORTING OF PRECIP)
+		#-Report Precip  
 		self.reporting.reporting(self, pcr, 'TotPrec', Precip)
-		self.reporting.reporting(self, pcr, 'TotPrecF', Precip * (1-self.GlacFrac))
+		#####MAYBE REMOVE THE FRACTIONAL REPORTING OF PRECIP)
+# 		self.reporting.reporting(self, pcr, 'TotPrecF', Precip * (1-self.GlacFrac))
 		
 		#-Temperature and reference evapotranspiration
 		Temp = pcr.readmap(pcrm.generateNameT(self.Tair, self.counter))
@@ -735,12 +732,16 @@ class sphy(pcrm.DynamicModel):
 			intercep = self.dynamic_veg.Inter_function(pcr, self.Scanopy, vegoutput[1], ETref)
 			#-interception
 			Int = intercep[0]
-			#-report interception corrected for fraction
-			self.reporting.reporting(self, pcr, 'TotIntF', Int * (1-self.GlacFrac))
+# 			#-report interception corrected for fraction
+# 			self.reporting.reporting(self, pcr, 'TotIntF', Int * (1-self.GlacFrac))
+			#-report interception
+			self.reporting.reporting(self, pcr, 'TotIntF', Int)
 			#-effective precipitation
 			Precip = intercep[1]
-			#-Report effective precipitation corrected for fraction
-			self.reporting.reporting(self, pcr, 'TotPrecEF', Precip * (1-self.GlacFrac))
+# 			#-Report effective precipitation corrected for fraction
+# 			self.reporting.reporting(self, pcr, 'TotPrecEF', Precip * (1-self.GlacFrac))
+			#-Report effective precipitation
+			self.reporting.reporting(self, pcr, 'TotPrecEF', Precip)
 			#-canopy storage
 			self.Scanopy = intercep[2]
 		elif self.KcStatFLAG == 0:
@@ -752,9 +753,10 @@ class sphy(pcrm.DynamicModel):
 				self.Kc = self.KcOld
 		#-report mm effective precipitation for sub-basin averages		
 		if self.mm_rep_FLAG == 1 and (self.RoutFLAG == 1 or self.ResFLAG == 1 or self.LakeFLAG == 1):
-			self.PrecSubBasinTSS.sample(pcr.catchmenttotal(Precip * (1-self.GlacFrac), self.FlowDir) / pcr.catchmenttotal(1, self.FlowDir))		
+# 			self.PrecSubBasinTSS.sample(pcr.catchmenttotal(Precip * (1-self.GlacFrac), self.FlowDir) / pcr.catchmenttotal(1, self.FlowDir))		
+			self.PrecSubBasinTSS.sample(pcr.catchmenttotal(Precip, self.FlowDir) / pcr.catchmenttotal(1, self.FlowDir))
 
-		#-Snow, rain, and ice calculations for glacier part
+		#-Snow, rain, and glacier calculations for glacier fraction of cell
 		if self.GlacFLAG:
 			#-1 dim array of Tavg map
 			T_1d = pcr.pcr2numpy(Temp, -9999).flatten()  	
@@ -773,8 +775,6 @@ class sphy(pcrm.DynamicModel):
 			#-update table with model cel precipitation
 			self.GlacTable.update(P)
 			P = None; P_1d = None; del P, P_1d
-# 			#-correct precipitation for glacier fraction
-# 			self.GlacTable['Prec_GLAC'] = self.GlacTable['Prec_GLAC'] * self.GlacTable['FRAC_GLAC']  #-Correct precipitation for glacier fraction
 			#-Snow and rain differentiation
 			self.GlacTable['Rain_GLAC'] = 0; self.GlacTable['Snow_GLAC'] = 0; 
 			mask = self.GlacTable['GLAC_T'] >= self.Tcrit
@@ -823,68 +823,148 @@ class sphy(pcrm.DynamicModel):
 			mask = (fullMelt & self.DBmask)  #-mask for Debris covered Glacier and full melt
 			self.GlacTable.loc[mask, 'GlacMelt'] = Tmelt.loc[mask] * self.DDFDG
 			
-# 			#-Glacier runoff
-# 			GlacR = self.glacier.GlacR(self.GlacF, GlacMelt, self.GlacFrac)
-# 			#-Report glacier runoff
-# 			self.reporting.reporting(self, pcr, 'TotGlacRF', GlacR)
-# 			#-Glacier percolation to groundwater
-# 			GlacPerc = self.glacier.GPerc(self.GlacF, GlacMelt, self.GlacFrac)
-# 			#-Report glacier percolation to groundwater
-# 			self.reporting.reporting(self, pcr, 'TotGlacPercF', GlacPerc)
+			#-Glacier runoff
+			mask = self.GlacTable['OldSnowStore_GLAC'] == 0  #-only add rain to glacmelt when there was no snowpack at beginning to time-step
+			#-Glacier runoff consisting of melt and rainfall
+			self.GlacTable.loc[mask, 'GlacR'] = self.GlacF * (self.GlacTable.loc[mask, 'GlacMelt'] + self.GlacTable.loc[mask, 'Rain_GLAC'])
+			#-Glacier percolation consisting of melt and rainfall
+			self.GlacTable.loc[mask, 'GlacPerc'] = (1-self.GlacF) * (self.GlacTable.loc[mask, 'GlacMelt'] + self.GlacTable.loc[mask, 'Rain_GLAC'])
+			#-Glacier runoff consisting of melt only
+			self.GlacTable.loc[pcr.numpy.invert(mask), 'GlacR'] = self.GlacF * self.GlacTable.loc[pcr.numpy.invert(mask), 'GlacMelt']
+			#-Glacier percolation consisting of melt only
+			self.GlacTable.loc[pcr.numpy.invert(mask), 'GlacPerc'] = (1-self.GlacF) * self.GlacTable.loc[pcr.numpy.invert(mask), 'GlacMelt']
+			mask = None; del mask
 			
-		if self.counter == 10:
-			self.GlacTable.to_csv(self.outpath + 'out.csv')
-			exit(0)	
-
+			#-Initiate model id and glacier id aggregation tables 
+			GlacTable_MODid = self.GlacTable.loc[:,['Prec_GLAC', 'Rain_GLAC', 'Snow_GLAC', 'ActSnowMelt_GLAC', 'SnowStore_GLAC',\
+									'SnowWatStore_GLAC', 'TotalSnowStore_GLAC', 'SnowR_GLAC', 'GlacMelt', 'GlacR', 'GlacPerc']]
+			GlacTable_GLACid = GlacTable_MODid.copy()
+			#-Multiply with the glacier fraction
+			GlacTable_MODid = GlacTable_MODid.multiply(self.GlacTable['FRAC_GLAC'], axis='index')
+			GlacTable_GLACid = GlacTable_GLACid.multiply(self.GlacTable['FRAC_GLAC'], axis='index')
+			#-Add GLAC_ID column and FRAC_GLAC column
+			GlacTable_GLACid['GLAC_ID'] = self.GlacTable['GLAC_ID']; GlacTable_GLACid['FRAC_GLAC'] = self.GlacTable['FRAC_GLAC']
+			#-set GLAC_ID as index
+			GlacTable_GLACid.index = GlacTable_GLACid['GLAC_ID']; del GlacTable_GLACid['GLAC_ID']  #-remove the GLAC_ID column
+			#-Do the aggregation
+			GlacTable_MODid = GlacTable_MODid.groupby(GlacTable_MODid.index).sum() #-For model ID
+			GlacTable_GLACid = GlacTable_GLACid.groupby(GlacTable_GLACid.index).sum() #-For Glacier ID and divide by total fraction for glacier weighted average
+			GlacTable_GLACid = GlacTable_GLACid.div(GlacTable_GLACid['FRAC_GLAC'], axis='index')
 			
-		
-			
-# 			print self.GlacTable
+			#-report back to model ID
+			#-Rainfall on glacier
+			Rain_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)  #-YES
+			Rain_GLAC[self.GlacTrue] = GlacTable_MODid['Rain_GLAC']
+			Rain_GLAC = Rain_GLAC.reshape(self.ModelID.shape)
+			Rain_GLAC = pcr.numpy2pcr(Scalar, Rain_GLAC, -9999)
+			pcr.report(Rain_GLAC, self.outpath + 'Rain_GLAC.map')
+			#-Snowfall on glacier
+			Snow_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)  #-YES
+			Snow_GLAC[self.GlacTrue] = GlacTable_MODid['Snow_GLAC']
+			Snow_GLAC = Snow_GLAC.reshape(self.ModelID.shape)
+			Snow_GLAC = pcr.numpy2pcr(Scalar, Snow_GLAC, -9999)
+			pcr.report(Snow_GLAC, self.outpath + 'Snow_GLAC.map')
+			#-Act snowmelt from glacier
+			ActSnowMelt_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)   #-YES
+			ActSnowMelt_GLAC[self.GlacTrue] = GlacTable_MODid['ActSnowMelt_GLAC']
+			ActSnowMelt_GLAC = ActSnowMelt_GLAC.reshape(self.ModelID.shape)
+			ActSnowMelt_GLAC = pcr.numpy2pcr(Scalar, ActSnowMelt_GLAC, -9999)
+			pcr.report(ActSnowMelt_GLAC, self.outpath + 'ActSnowMelt_GLAC.map')
+			#-Snowstore on glacier
+			SnowStore_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)
+			SnowStore_GLAC[self.GlacTrue] = GlacTable_MODid['SnowStore_GLAC']
+			SnowStore_GLAC = SnowStore_GLAC.reshape(self.ModelID.shape)
+			SnowStore_GLAC = pcr.numpy2pcr(Scalar, SnowStore_GLAC, -9999)
+			pcr.report(Snow_GLAC, self.outpath + 'SnowStore_GLAC.map')
+			#-SnowWatStore on glacier
+			SnowWatStore_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)
+			SnowWatStore_GLAC[self.GlacTrue] = GlacTable_MODid['SnowWatStore_GLAC']
+			SnowWatStore_GLAC = SnowWatStore_GLAC.reshape(self.ModelID.shape)
+			SnowWatStore_GLAC = pcr.numpy2pcr(Scalar, SnowWatStore_GLAC, -9999)
+			pcr.report(SnowWatStore_GLAC, self.outpath + 'SnowWatStore_GLAC.map')
+			#-TotalSnowStore on glacier
+			TotalSnowStore_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)  #-YES
+			TotalSnowStore_GLAC[self.GlacTrue] = GlacTable_MODid['TotalSnowStore_GLAC']
+			TotalSnowStore_GLAC = TotalSnowStore_GLAC.reshape(self.ModelID.shape)
+			TotalSnowStore_GLAC = pcr.numpy2pcr(Scalar, TotalSnowStore_GLAC, -9999)
+			pcr.report(TotalSnowStore_GLAC, self.outpath + 'TotalSnowStore_GLAC.map')
+			#-SnowR from glacier
+			SnowR_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)  #-YES
+			SnowR_GLAC[self.GlacTrue] = GlacTable_MODid['SnowR_GLAC']
+			SnowR_GLAC = SnowR_GLAC.reshape(self.ModelID.shape)
+			SnowR_GLAC = pcr.numpy2pcr(Scalar, SnowR_GLAC, -9999)
+			pcr.report(SnowR_GLAC, self.outpath + 'SnowR_GLAC.map')
+			#-Glacier melt
+			GlacMelt = pcr.numpy.zeros(self.ModelID_1d.shape)  #-YES
+			GlacMelt[self.GlacTrue] = GlacTable_MODid['GlacMelt']
+			GlacMelt = GlacMelt.reshape(self.ModelID.shape)
+			GlacMelt = pcr.numpy2pcr(Scalar, GlacMelt, -9999)
+			#-Report glacier melt
+			self.reporting.reporting(self, pcr, 'TotGlacMelt', GlacMelt)
+			#-Glacier runoff
+			GlacR = pcr.numpy.zeros(self.ModelID_1d.shape)  #-YES
+			GlacR[self.GlacTrue] = GlacTable_MODid['GlacR']
+			GlacR = GlacR.reshape(self.ModelID.shape)
+			GlacR = pcr.numpy2pcr(Scalar, GlacR, -9999)
+			#-Report glacier runoff
+			self.reporting.reporting(self, pcr, 'TotGlacRF', GlacR)
+			pcr.report(GlacR, self.outpath + 'GlacR.map')
+			#-Glacier percolation 
+			GlacPerc = pcr.numpy.zeros(self.ModelID_1d.shape)  #-YES
+			GlacPerc[self.GlacTrue] = GlacTable_MODid['GlacPerc']
+			GlacPerc = GlacPerc.reshape(self.ModelID.shape)
+			GlacPerc = pcr.numpy2pcr(Scalar, GlacPerc, -9999)
+			#-Report glacier percolation to groundwater
+			self.reporting.reporting(self, pcr, 'TotGlacPercF', GlacPerc)
+		#-If glacier module is not used, then
+		else:
+			Rain_GLAC = 0  #-YES
+			Snow_GLAC = 0  #-YES
+			ActSnowMelt_GLAC = 0  #-YES
+			TotalSnowStore_GLAC = 0  #-YES
+			SnowR_GLAC = 0  #-YES
+			GlacR = 0
+			GlacMelt = 0
+			GlacPerc = 0
 
-		
-
-
-
-
-		#####-BELOW IS NOT MODIFIED YET #####################################
-# 		
-# 		# Snow and rain
-# 		if self.SnowFLAG == 1:
-# 			#-Snow and rain differentiation
-# 			Snow = pcr.ifthenelse(Temp >= self.Tcrit, 0, Precip)
-# 			Rain = pcr.ifthenelse(Temp < self.Tcrit, 0, Precip)
-# 			#-Report Snow
-# 			self.reporting.reporting(self, pcr, 'TotSnow', Snow)
+		# Snow and rain for non-glacier part of cell
+		if self.SnowFLAG == 1:
+			#-Snow and rain differentiation
+			Snow = pcr.ifthenelse(Temp >= self.Tcrit, 0, Precip)
+			Rain = pcr.ifthenelse(Temp < self.Tcrit, 0, Precip)
+			#-Report Snow
+			self.reporting.reporting(self, pcr, 'TotSnow', Snow * (1-self.GlacFrac) + Snow_GLAC)
 # 			self.reporting.reporting(self, pcr, 'TotSnowF', Snow * (1-self.GlacFrac))
-# 			#-Snow melt
-# 			PotSnowMelt = self.snow.PotSnowMelt(pcr, Temp, self.DDFS)
-# 			ActSnowMelt = self.snow.ActSnowMelt(pcr, self.SnowStore, PotSnowMelt)
-# 			#-Report snow melt
-# 			self.reporting.reporting(self, pcr, 'TotSnowMelt', ActSnowMelt)
+			#-Snow melt
+			PotSnowMelt = self.snow.PotSnowMelt(pcr, Temp, self.DDFS)
+			ActSnowMelt = self.snow.ActSnowMelt(pcr, self.SnowStore, PotSnowMelt)
+			#-Report snow melt
+			self.reporting.reporting(self, pcr, 'TotSnowMelt', ActSnowMelt * (1-self.GlacFrac) + ActSnowMelt_GLAC)
 # 			self.reporting.reporting(self, pcr, 'TotSnowMeltF', ActSnowMelt * SnowFrac)
-# 			#-Update snow store
-# 			self.SnowStore = self.snow.SnowStoreUpdate(pcr, self.SnowStore, Snow, ActSnowMelt, Temp, self.SnowWatStore)
-# 			#-Caclulate the maximum amount of water that can be stored in snowwatstore
-# 			MaxSnowWatStore = self.snow.MaxSnowWatStorage(self.SnowSC, self.SnowStore)
-# 			OldSnowWatStore = self.SnowWatStore
-# 			#-Calculate the actual amount of water stored in snowwatstore
-# 			self.SnowWatStore = self.snow.SnowWatStorage(pcr, Temp, MaxSnowWatStore, self.SnowWatStore, ActSnowMelt, Rain)
-# 			#-Changes in total water storage in snow (SnowStore and SnowWatStore)
-# 			OldTotalSnowStore = self.TotalSnowStore
-# 			self.TotalSnowStore = self.snow.TotSnowStorage(self.SnowStore, self.SnowWatStore, SnowFrac, RainFrac)
-# 			#-Snow runoff
-# 			SnowR = self.snow.SnowR(pcr, self.SnowWatStore, MaxSnowWatStore, ActSnowMelt, Rain, OldSnowWatStore, SnowFrac)
-# 			#-Report Snow runoff
-# 			self.reporting.reporting(self, pcr, 'TotSnowRF', SnowR)
-# 		else:
-# 			Rain = Precip
-# 			SnowR = 0
-# 			OldTotalSnowStore = 0
-# 			self.TotalSnowStore = 0
-# 		#-Report Rain
-# 		self.reporting.reporting(self, pcr, 'TotRain', Rain)
+			#-Update snow store
+			self.SnowStore = self.snow.SnowStoreUpdate(pcr, self.SnowStore, Snow, ActSnowMelt, Temp, self.SnowWatStore)
+			#-Caclulate the maximum amount of water that can be stored in snowwatstore
+			MaxSnowWatStore = self.snow.MaxSnowWatStorage(self.SnowSC, self.SnowStore)
+			OldSnowWatStore = self.SnowWatStore
+			#-Calculate the actual amount of water stored in snowwatstore
+			self.SnowWatStore = self.snow.SnowWatStorage(pcr, Temp, MaxSnowWatStore, self.SnowWatStore, ActSnowMelt, Rain)
+			#-Changes in total water storage in snow (SnowStore and SnowWatStore)
+			OldTotalSnowStore = self.TotalSnowStore
+			self.TotalSnowStore = self.snow.TotSnowStorage(self.SnowStore, self.SnowWatStore, SnowFrac, RainFrac) + TotalSnowStore_GLAC
+			#-Snow runoff
+			SnowR = self.snow.SnowR(pcr, self.SnowWatStore, MaxSnowWatStore, ActSnowMelt, Rain, OldSnowWatStore, SnowFrac) + SnowR_GLAC
+			#-Report Snow runoff
+			self.reporting.reporting(self, pcr, 'TotSnowRF', SnowR)
+		else:
+			Rain = Precip
+			SnowR = 0
+			OldTotalSnowStore = 0
+			self.TotalSnowStore = 0
+			
+		#-Report Rain
+		self.reporting.reporting(self, pcr, 'TotRain', Rain * (1-self.GlacFrac) + Rain_GLAC)
 # 		self.reporting.reporting(self, pcr, 'TotRainF', Rain * (1-self.GlacFrac))
-# 		
+
 # 		#-Glacier calculations
 # 		if self.GlacFLAG == 1:
 # 			#-Glacier melt from clean ice glaciers
@@ -911,309 +991,314 @@ class sphy(pcrm.DynamicModel):
 # 			GlacMelt = 0
 # 			GlacPerc = 0
 # 		
-# 		#-Potential evapotranspiration (THIS SHOULD STILL BE IMPROVED WITH DYNAMIC VEGETATION MODULE)
-# 		ETpot = self.ET.ETpot(ETref, self.Kc) 
-# 		#-Report ETpot
-# 		self.reporting.reporting(self, pcr, 'TotETpot', ETpot)
-# 		self.reporting.reporting(self, pcr, 'TotETpotF', ETpot * RainFrac)
-# 				
-# 		#-Rootzone calculations
-# 		self.RootWater = self.RootWater + pcr.ifthenelse(RainFrac > 0, Rain, 0) + self.CapRise
-# 		#-Rootzone runoff
-# 		RootRunoff = self.rootzone.RootRunoff(pcr, RainFrac, self.RootWater, self.RootSat)
-# 		self.RootWater = self.RootWater - RootRunoff
-# 		#-Actual evapotranspiration
-# 		etreddry = pcr.max(pcr.min((self.RootWater - self.RootDry) / (self.RootWilt - self.RootDry), 1), 0)
-# 		ETact = self.ET.ETact(pcr, ETpot, self.RootWater, self.RootSat, etreddry, RainFrac)
-# 		#-Report the actual evapotranspiration
-# 		self.reporting.reporting(self, pcr, 'TotETact', ETact)
-# 		#-Actual evapotranspiration, corrected for rain fraction
-# 		ActETact = ETact * RainFrac	
-# 		#-Report the actual evapotranspiration, corrected for rain fraction
-# 		self.reporting.reporting(self, pcr, 'TotETactF', ActETact)
-# 		if self.mm_rep_FLAG == 1 and (self.RoutFLAG == 1 or self.ResFLAG == 1 or self.LakeFLAG == 1):
-# 			self.ETaSubBasinTSS.sample(pcr.catchmenttotal(ActETact, self.FlowDir) / pcr.catchmenttotal(1, self.FlowDir))
-# 		#-Update rootwater content
-# 		self.RootWater = pcr.max(self.RootWater - ETact, 0)
-# 		#-Rootwater drainage
-# 		self.RootDrain = self.rootzone.RootDrainage(pcr, self.RootWater, self.RootDrain, self.RootField, self.RootSat, self.RootDrainVel, self.RootTT)
-# 		#-Update rootwater content
-# 		self.RootWater = self.RootWater - self.RootDrain
-# 		#-Rootwater percolation
-# 		rootperc = self.rootzone.RootPercolation(pcr, self.RootWater, self.SubWater, self.RootField, self.RootTT, self.SubSat)
-# 		#-Report rootzone percolation, corrected for fraction
-# 		self.reporting.reporting(self, pcr, 'TotRootPF', rootperc * (1 - self.GlacFrac))
-# 		#-Update rootwater content
-# 		self.RootWater = self.RootWater - rootperc
-# 
-# 		#-Sub soil calculations
-# 		self.SubWater = self.SubWater + rootperc
-# 		if self.GroundFLAG == 0:
-# 			if self.SeepStatFLAG == 0:
-# 				try:
-# 					self.SeePage = pcr.readmap(pcrm.generateNameT(self.Seepmaps, self.counter))
-# 					self.SeepOld = self.SeePage
-# 				except:
-# 					self.SeePage = self.SeepOld
-# 			#-Report seepage
-# 			self.reporting.reporting(self, pcr, 'TotSeepF', pcr.scalar(self.SeePage))
-# 			self.SubWater = pcr.min(pcr.max(self.SubWater - self.SeePage, 0), self.SubSat)
-# 			if self.mm_rep_FLAG == 1 and (self.RoutFLAG == 1 or self.ResFLAG == 1 or self.LakeFLAG == 1):
-# 				self.SeepSubBasinTSS.sample(pcr.catchmenttotal(self.SeePage, self.FlowDir) / pcr.catchmenttotal(1, self.FlowDir))
-# 		#-Capillary rise
-# 		self.CapRise = self.subzone.CapilRise(pcr, self.SubField, self.SubWater, self.CapRiseMax, self.RootWater, self.RootSat, self.RootField)
-# 		#-Report capillary rise, corrected for fraction
-# 		self.reporting.reporting(self, pcr, 'TotCapRF', self.CapRise * (1-self.GlacFrac))
-# 		#-Update sub soil water content
-# 		self.SubWater = self.SubWater - self.CapRise
-# 		if self.GroundFLAG == 1:   # sub percolation will be calculated instead of subdrainage
-# 			subperc = self.subzone.SubPercolation(pcr, self.SubWater, self.SubField, self.SubTT, self.Gw, self.GwSat)
-# 			ActSubPerc = subperc * (1-self.GlacFrac)
-# 			#-Report the subzone percolation, corrected for the fraction
-# 			self.reporting.reporting(self, pcr, 'TotSubPF', ActSubPerc) 
-# 			#-Update sub soil water content
-# 			self.SubWater = self.SubWater - subperc
-# 		else: # sub drainage will be calculated instead of sub percolation
-# 			self.SubDrain = self.subzone.SubDrainage(pcr, self.SubWater, self.SubField, self.SubSat, self.SubDrainVel, self.SubDrain, self.SubTT)
-# 			#-Report drainage from subzone
-# 			self.reporting.reporting(self, pcr, 'TotSubDF', self.SubDrain)
-# 			#-Update sub soil water content
-# 			self.SubWater = self.SubWater - self.SubDrain
-# 			
-# 		#-Changes in soil water storage
-# 		OldSoilWater = self.SoilWater
-# 		self.SoilWater = (self.RootWater + self.SubWater) * (1-self.GlacFrac)
-# 		
-# 		#-Rootzone runoff
-# 		RootR = RootRunoff * RainFrac
-# 		#-Report rootzone runoff, corrected for fraction
-# 		self.reporting.reporting(self, pcr, 'TotRootRF', RootR)
-# 		#-Rootzone drainage
-# 		RootD = self.RootDrain * (1-self.GlacFrac)
-# 		#-Report rootzone drainage, corrected for fraction
-# 		self.reporting.reporting(self, pcr, 'TotRootDF', RootD)
-# 		#-Rain runoff
-# 		RainR = RootR + RootD
-# 		#-Report rain runoff
-# 		self.reporting.reporting(self, pcr, 'TotRainRF', RainR)
-# 		
-# 		#-Groundwater calculations
-# 		if self.GroundFLAG == 1:
-# 			GwOld = self.Gw
-# 			#-Groundwater recharge
-# 			self.GwRecharge = self.groundwater.GroundWaterRecharge(pcr,	self.deltaGw, self.GwRecharge, ActSubPerc, GlacPerc)
-# 			#-Report groundwater recharge
-# 			self.reporting.reporting(self, pcr, 'TotGwRechargeF', self.GwRecharge)
-# 			#-Update groundwater storage
-# 			self.Gw = self.Gw + self.GwRecharge
-# 			#-Baseflow
-# 			self.BaseR = self.groundwater.BaseFlow(pcr, self.Gw, self.BaseR, self.GwRecharge, self.BaseThresh, self.alphaGw)
-# 			#-Report Baseflow
-# 			self.reporting.reporting(self, pcr, 'TotBaseRF', self.BaseR)
-# 			#-Update groundwater storage
-# 			self.Gw = self.Gw - self.BaseR
-# 			#-Calculate groundwater level
-# 			self.H_gw = self.groundwater.HLevel(pcr, self.H_gw, self.alphaGw, self.GwRecharge, self.YieldGw)
-# 			#-Report groundwater
-# 			self.reporting.reporting(self, pcr, 'GWL', ((self.SubDepthFlat + self.RootDepthFlat + self.GwDepth)/1000 - self.H_gw)*-1)
-# 
-# 		else:
-# 			#-Use drainage from subsoil as baseflow
-# 			self.BaseR = self.SubDrain
-# 			#-Groundwater level as scaled between min and max measured gwl
-# 			SoilAct = self.RootWater + self.SubWater;
-# 			SoilRel = (SoilAct - self.SoilMin) / (self.SoilMax - self.SoilMin) # scale between 0 (dry) and 1 (wet)
-# 			GWL = self.GWL_base - (SoilRel-0.5) * self.GWL_base
-# 			#-Report groundwater
-# 			self.reporting.reporting(self, pcr, 'GWL', GWL)
-# 		
-# 		#-Report Total runoff
-# 		self.reporting.reporting(self, pcr, 'TotRF', self.BaseR + RainR + SnowR + GlacR)
-# 		
-# 		#-Water balance
-# 		if self.GroundFLAG == 1:
+		#-Potential evapotranspiration (THIS SHOULD STILL BE IMPROVED WITH DYNAMIC VEGETATION MODULE)
+		ETpot = self.ET.ETpot(ETref, self.Kc) 
+		#-Report ETpot
+		self.reporting.reporting(self, pcr, 'TotETpot', ETpot)
+		self.reporting.reporting(self, pcr, 'TotETpotF', ETpot * RainFrac)
+				
+		#-Rootzone calculations
+		self.RootWater = self.RootWater + pcr.ifthenelse(RainFrac > 0, Rain, 0) + self.CapRise
+		#-Rootzone runoff
+		RootRunoff = self.rootzone.RootRunoff(pcr, RainFrac, self.RootWater, self.RootSat)
+		self.RootWater = self.RootWater - RootRunoff
+		#-Actual evapotranspiration
+		etreddry = pcr.max(pcr.min((self.RootWater - self.RootDry) / (self.RootWilt - self.RootDry), 1), 0)
+		ETact = self.ET.ETact(pcr, ETpot, self.RootWater, self.RootSat, etreddry, RainFrac)
+		#-Report the actual evapotranspiration
+		self.reporting.reporting(self, pcr, 'TotETact', ETact)
+		#-Actual evapotranspiration, corrected for rain fraction
+		ActETact = ETact * RainFrac	
+		#-Report the actual evapotranspiration, corrected for rain fraction
+		self.reporting.reporting(self, pcr, 'TotETactF', ActETact)
+		if self.mm_rep_FLAG == 1 and (self.RoutFLAG == 1 or self.ResFLAG == 1 or self.LakeFLAG == 1):
+			self.ETaSubBasinTSS.sample(pcr.catchmenttotal(ActETact, self.FlowDir) / pcr.catchmenttotal(1, self.FlowDir))
+		#-Update rootwater content
+		self.RootWater = pcr.max(self.RootWater - ETact, 0)
+		#-Rootwater drainage
+		self.RootDrain = self.rootzone.RootDrainage(pcr, self.RootWater, self.RootDrain, self.RootField, self.RootSat, self.RootDrainVel, self.RootTT)
+		#-Update rootwater content
+		self.RootWater = self.RootWater - self.RootDrain
+		#-Rootwater percolation
+		rootperc = self.rootzone.RootPercolation(pcr, self.RootWater, self.SubWater, self.RootField, self.RootTT, self.SubSat)
+		#-Report rootzone percolation, corrected for fraction
+		self.reporting.reporting(self, pcr, 'TotRootPF', rootperc * (1 - self.GlacFrac))
+		#-Update rootwater content
+		self.RootWater = self.RootWater - rootperc
+		
+		#-Sub soil calculations
+		self.SubWater = self.SubWater + rootperc
+		if self.GroundFLAG == 0:
+			if self.SeepStatFLAG == 0:
+				try:
+					self.SeePage = pcr.readmap(pcrm.generateNameT(self.Seepmaps, self.counter))
+					self.SeepOld = self.SeePage
+				except:
+					self.SeePage = self.SeepOld
+			#-Report seepage
+			self.reporting.reporting(self, pcr, 'TotSeepF', pcr.scalar(self.SeePage))
+			self.SubWater = pcr.min(pcr.max(self.SubWater - self.SeePage, 0), self.SubSat)
+			if self.mm_rep_FLAG == 1 and (self.RoutFLAG == 1 or self.ResFLAG == 1 or self.LakeFLAG == 1):
+				self.SeepSubBasinTSS.sample(pcr.catchmenttotal(self.SeePage, self.FlowDir) / pcr.catchmenttotal(1, self.FlowDir))
+		#-Capillary rise
+		self.CapRise = self.subzone.CapilRise(pcr, self.SubField, self.SubWater, self.CapRiseMax, self.RootWater, self.RootSat, self.RootField)
+		#-Report capillary rise, corrected for fraction
+		self.reporting.reporting(self, pcr, 'TotCapRF', self.CapRise * (1-self.GlacFrac))
+		#-Update sub soil water content
+		self.SubWater = self.SubWater - self.CapRise
+		if self.GroundFLAG == 1:   # sub percolation will be calculated instead of subdrainage
+			subperc = self.subzone.SubPercolation(pcr, self.SubWater, self.SubField, self.SubTT, self.Gw, self.GwSat)
+			ActSubPerc = subperc * (1-self.GlacFrac)
+			#-Report the subzone percolation, corrected for the fraction
+			self.reporting.reporting(self, pcr, 'TotSubPF', ActSubPerc) 
+			#-Update sub soil water content
+			self.SubWater = self.SubWater - subperc
+		else: # sub drainage will be calculated instead of sub percolation
+			self.SubDrain = self.subzone.SubDrainage(pcr, self.SubWater, self.SubField, self.SubSat, self.SubDrainVel, self.SubDrain, self.SubTT)
+			#-Report drainage from subzone
+			self.reporting.reporting(self, pcr, 'TotSubDF', self.SubDrain)
+			#-Update sub soil water content
+			self.SubWater = self.SubWater - self.SubDrain
+			
+		#-Changes in soil water storage
+		OldSoilWater = self.SoilWater
+		self.SoilWater = (self.RootWater + self.SubWater) * (1-self.GlacFrac)
+
+		#-Rootzone runoff
+		RootR = RootRunoff * RainFrac
+		#-Report rootzone runoff, corrected for fraction
+		self.reporting.reporting(self, pcr, 'TotRootRF', RootR)
+		#-Rootzone drainage
+		RootD = self.RootDrain * (1-self.GlacFrac)
+		#-Report rootzone drainage, corrected for fraction
+		self.reporting.reporting(self, pcr, 'TotRootDF', RootD)
+		#-Rain runoff
+		RainR = RootR + RootD
+		#-Report rain runoff
+		self.reporting.reporting(self, pcr, 'TotRainRF', RainR)
+		
+		#-Groundwater calculations
+		if self.GroundFLAG == 1:
+			GwOld = self.Gw
+			#-Groundwater recharge
+			self.GwRecharge = self.groundwater.GroundWaterRecharge(pcr,	self.deltaGw, self.GwRecharge, ActSubPerc, GlacPerc)
+			#-Report groundwater recharge
+			self.reporting.reporting(self, pcr, 'TotGwRechargeF', self.GwRecharge)
+			#-Update groundwater storage
+			self.Gw = self.Gw + self.GwRecharge
+			#-Baseflow
+			self.BaseR = self.groundwater.BaseFlow(pcr, self.Gw, self.BaseR, self.GwRecharge, self.BaseThresh, self.alphaGw)
+			#-Report Baseflow
+			self.reporting.reporting(self, pcr, 'TotBaseRF', self.BaseR)
+			#-Update groundwater storage
+			self.Gw = self.Gw - self.BaseR
+			#-Calculate groundwater level
+			self.H_gw = self.groundwater.HLevel(pcr, self.H_gw, self.alphaGw, self.GwRecharge, self.YieldGw)
+			#-Report groundwater
+			self.reporting.reporting(self, pcr, 'GWL', ((self.SubDepthFlat + self.RootDepthFlat + self.GwDepth)/1000 - self.H_gw)*-1)
+
+		else:
+			#-Use drainage from subsoil as baseflow
+			self.BaseR = self.SubDrain
+			#-Groundwater level as scaled between min and max measured gwl
+			SoilAct = self.RootWater + self.SubWater;
+			SoilRel = (SoilAct - self.SoilMin) / (self.SoilMax - self.SoilMin) # scale between 0 (dry) and 1 (wet)
+			GWL = self.GWL_base - (SoilRel-0.5) * self.GWL_base
+			#-Report groundwater
+			self.reporting.reporting(self, pcr, 'GWL', GWL)
+			
+		#-Report Total runoff
+		self.reporting.reporting(self, pcr, 'TotRF', self.BaseR + RainR + SnowR + GlacR)
+
+		#-Water balance
+		if self.GroundFLAG == 1:
 # 			waterbalance = Precip * (1-self.GlacFrac) + GlacMelt * self.GlacFrac - ActETact - GlacR - SnowR - RainR -\
 # 				self.BaseR - (self.SoilWater-OldSoilWater) - (self.TotalSnowStore-OldTotalSnowStore) - (self.Gw-GwOld)
-# 		elif self.GroundFLAG == 0:
-# 			waterbalance = Precip - ActETact - self.SeePage - SnowR - RainR - self.BaseR - (self.SoilWater-OldSoilWater) - (self.TotalSnowStore-OldTotalSnowStore)
-# 		self.reporting.reporting(self, pcr, 'wbal', waterbalance)
-# 		
-# 		#-Routing for lake and/or reservoir modules
-# 		if self.LakeFLAG == 1 or self.ResFLAG == 1:
-# 			#-Update storage in lakes/reservoirs (m3) with specific runoff
-# 			self.StorRES = self.StorRES + pcr.ifthenelse(self.QFRAC==0, 0.001 * pcr.cellarea() * (self.BaseR + RainR + GlacR + SnowR), 0)
-# 			OldStorage = self.StorRES
-# 			#-Calculate lake/reservoir outflow volumes
-# 			if self.LakeFLAG ==1 and self.ResFLAG ==1:
-# 				tempvar = self.lakes.UpdateLakeHStore(self, pcr, pcrm)
-# 				LakeLevel = tempvar[0]
-# 				self.StorRES = tempvar[1]
-# 				LakeQ = self.lakes.QLake(self, pcr, LakeLevel)
-# 				ResQ = self.reservoirs.QRes(self, pcr)
-# 				Qout = pcr.ifthenelse(self.ResID != 0, ResQ, pcr.ifthenelse(self.LakeID!=0, LakeQ, 0))
-# 			elif self.LakeFLAG ==1:
-# 				tempvar = self.lakes.UpdateLakeHStore(self, pcr, pcrm)
-# 				LakeLevel = tempvar[0]
-# 				self.StorRES = tempvar[1]
-# 				Qout = self.lakes.QLake(self, pcr, LakeLevel)
-# 			else:
-# 				Qout = self.reservoirs.QRes(self, pcr)
-# 
-# 			#-Calculate volume available for routing (=outflow lakes/reservoir + cell specific runoff)
-# 			RunoffVolume = pcr.upstream(self.FlowDir, Qout) + pcr.ifthenelse(self.QFRAC==0, 0, 0.001 * pcr.cellarea() * (self.BaseR + RainR + GlacR + SnowR))
-# 			#-Routing of total flow
-# 			tempvar = self.routing.ROUT(self, pcr, RunoffVolume, self.QRAold, Qout, self.StorRES)
-# 			self.StorRES = tempvar[0]
-# 			Q = tempvar[1]
-# 			Qin = tempvar[2]
-# 			self.QRAold = Q
-# 			self.reporting.reporting(self, pcr, 'QallRAtot', Q)
-# 			#-report flux in mm
-# 			if self.mm_rep_FLAG == 1:
-# 				self.QTOTSubBasinTSS.sample(((Q * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) * 1000)
-# 			#-report lake and reservoir waterbalance
-# 			if self.LakeFLAG == 1 and config.getint('REPORTING', 'Lake_wbal') ==1:
-# 				self.LakeInTSS.sample(Qin)
-# 				self.LakeOutTSS.sample(Qout) 
-# 				self.LakeStorTSS.sample(self.StorRES)
-# 			if self.ResFLAG == 1 and config.getint('REPORTING', 'Res_wbal') ==1:
-# 				self.ResInTSS.sample(Qin)
-# 				self.ResOutTSS.sample(Qout) 
-# 				self.ResStorTSS.sample(self.StorRES)
-# 
-# 			#-Routing of individual contributers
-# 			#-Snow routing
-# 			if self.SnowRA_FLAG == 1 and self.SnowFLAG == 1:
-# 				self.SnowRAstor = self.SnowRAstor + pcr.ifthenelse(self.QFRAC==0, SnowR * 0.001 * pcr.cellarea(), 0)
-# 				cQfrac = pcr.cover(self.SnowRAstor / OldStorage, 0)
-# 				cQout = cQfrac * Qout
-# 				cRunoffVolume = pcr.upstream(self.FlowDir, cQout) + pcr.ifthenelse(self.QFRAC==0, 0, 0.001 * pcr.cellarea() * SnowR)
-# 				tempvar = self.routing.ROUT(self, pcr, cRunoffVolume, self.SnowRAold, cQout, self.SnowRAstor)
-# 				self.SnowRAstor = tempvar[0]
-# 				SnowRA = tempvar[1]
-# 				cQin = tempvar[2]
-# 				self.SnowRAold = SnowRA
-# 				self.reporting.reporting(self, pcr, 'SnowRAtot', SnowRA)
-# 				if self.mm_rep_FLAG == 1:
-# 					self.QSNOWSubBasinTSS.sample(((SnowRA * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) *1000)
-# 				#-report lake and reservoir waterbalance
-# 				if self.LakeFLAG == 1 and config.getint('REPORTING', 'Lake_wbal') ==1:
-# 					self.LakeSnowInTSS.sample(cQin)
-# 					self.LakeSnowOutTSS.sample(cQout) 
-# 					self.LakeSnowStorTSS.sample(self.SnowRAstor)
-# 				if self.ResFLAG == 1 and config.getint('REPORTING', 'Res_wbal') ==1:
-# 					self.ResSnowInTSS.sample(cQin)
-# 					self.ResSnowOutTSS.sample(cQout) 
-# 					self.ResSnowStorTSS.sample(self.SnowRAstor)
-# 			#-Rain routing
-# 			if self.RainRA_FLAG == 1:
-# 				self.RainRAstor = self.RainRAstor + pcr.ifthenelse(self.QFRAC==0, RainR * 0.001 * pcr.cellarea(), 0)
-# 				cQfrac = pcr.cover(self.RainRAstor / OldStorage, 0)
-# 				cQout = cQfrac * Qout
-# 				cRunoffVolume = pcr.upstream(self.FlowDir, cQout) + pcr.ifthenelse(self.QFRAC==0, 0, 0.001 * pcr.cellarea() * RainR)
-# 				tempvar = self.routing.ROUT(self, pcr, cRunoffVolume, self.RainRAold, cQout, self.RainRAstor)
-# 				self.RainRAstor = tempvar[0]
-# 				RainRA = tempvar[1]
-# 				cQin = tempvar[2]
-# 				self.RainRAold = RainRA
-# 				self.reporting.reporting(self, pcr, 'RainRAtot', RainRA)
-# 				if self.mm_rep_FLAG == 1:
-# 					self.QRAINSubBasinTSS.sample(((RainRA * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) *1000)
-# 				#-report lake and reservoir waterbalance
-# 				if self.LakeFLAG == 1 and config.getint('REPORTING', 'Lake_wbal') ==1:
-# 					self.LakeRainInTSS.sample(cQin)
-# 					self.LakeRainOutTSS.sample(cQout) 
-# 					self.LakeRainStorTSS.sample(self.RainRAstor)
-# 				if self.ResFLAG == 1 and config.getint('REPORTING', 'Res_wbal') ==1:
-# 					self.ResRainInTSS.sample(cQin)
-# 					self.ResRainOutTSS.sample(cQout) 
-# 					self.ResRainStorTSS.sample(self.RainRAstor)
-# 			#-Glacier routing
-# 			if self.GlacRA_FLAG == 1 and self.GlacFLAG == 1:
-# 				self.GlacRAstor = self.GlacRAstor + pcr.ifthenelse(self.QFRAC==0, GlacR * 0.001 * pcr.cellarea(), 0)
-# 				cQfrac = pcr.cover(self.GlacRAstor / OldStorage, 0)
-# 				cQout = cQfrac * Qout
-# 				cRunoffVolume = pcr.upstream(self.FlowDir, cQout) + pcr.ifthenelse(self.QFRAC==0, 0, 0.001 * pcr.cellarea() * GlacR)
-# 				tempvar = self.routing.ROUT(self, pcr, cRunoffVolume, self.GlacRAold, cQout, self.GlacRAstor)
-# 				self.GlacRAstor = tempvar[0]
-# 				GlacRA = tempvar[1]
-# 				cQin = tempvar[2]
-# 				self.GlacRAold = GlacRA
-# 				self.reporting.reporting(self, pcr, 'GlacRAtot', GlacRA)
-# 				if self.mm_rep_FLAG == 1:
-# 					self.QGLACSubBasinTSS.sample(((GlacRA * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) *1000)
-# 				#-report lake and reservoir waterbalance
-# 				if self.LakeFLAG == 1 and config.getint('REPORTING', 'Lake_wbal') ==1:
-# 					self.LakeGlacInTSS.sample(cQin)
-# 					self.LakeGlacOutTSS.sample(cQout) 
-# 					self.LakeGlacStorTSS.sample(self.GlacRAstor)
-# 				if self.ResFLAG == 1 and config.getint('REPORTING', 'Res_wbal') ==1:
-# 					self.ResGlacInTSS.sample(cQin)
-# 					self.ResGlacOutTSS.sample(cQout) 
-# 					self.ResGlacStorTSS.sample(self.GlacRAstor)
-# 			#-Baseflow routing
-# 			if self.BaseRA_FLAG == 1:
-# 				self.BaseRAstor = self.BaseRAstor + pcr.ifthenelse(self.QFRAC==0, self.BaseR * 0.001 * pcr.cellarea(), 0)
-# 				cQfrac = pcr.cover(self.BaseRAstor / OldStorage, 0)
-# 				cQout = cQfrac * Qout
-# 				cRunoffVolume = pcr.upstream(self.FlowDir, cQout) + pcr.ifthenelse(self.QFRAC==0, 0, 0.001 * pcr.cellarea() * self.BaseR)
-# 				tempvar = self.routing.ROUT(self, pcr, cRunoffVolume, self.BaseRAold, cQout, self.BaseRAstor)
-# 				self.BaseRAstor = tempvar[0]
-# 				BaseRA = tempvar[1]
-# 				cQin = tempvar[2]
-# 				self.BaseRAold = BaseRA
-# 				self.reporting.reporting(self, pcr, 'BaseRAtot', BaseRA)
-# 				if self.mm_rep_FLAG == 1:
-# 					self.QBASFSubBasinTSS.sample(((BaseRA * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) *1000)
-# 				#-report lake and reservoir waterbalance
-# 				if self.LakeFLAG == 1 and config.getint('REPORTING', 'Lake_wbal') ==1:
-# 					self.LakeBaseInTSS.sample(cQin)
-# 					self.LakeBaseOutTSS.sample(cQout) 
-# 					self.LakeBaseStorTSS.sample(self.BaseRAstor)
-# 				if self.ResFLAG == 1 and config.getint('REPORTING', 'Res_wbal') ==1:
-# 					self.ResBaseInTSS.sample(cQin)
-# 					self.ResBaseOutTSS.sample(cQout) 
-# 					self.ResBaseStorTSS.sample(self.BaseRAstor)
-# 						
-# 		#-Normal routing module	
-# 		elif self.RoutFLAG == 1:
-# 			#-Rout total runoff
-# 			Q = self.routing.ROUT(pcr, self.BaseR + RainR + GlacR + SnowR, self.QRAold, self.FlowDir, self.kx)
-# 			self.QRAold = Q
-# 			self.reporting.reporting(self, pcr, 'QallRAtot', Q)
-# 			if self.mm_rep_FLAG == 1:
-# 				self.QTOTSubBasinTSS.sample(((Q * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) * 1000)
-# 			#-Snow routing
-# 			if self.SnowRA_FLAG == 1 and self.SnowFLAG == 1:
-# 				SnowRA = self.routing.ROUT(pcr, SnowR, self.SnowRAold, self.FlowDir, self.kx)
-# 				self.SnowRAold = SnowRA
-# 				self.reporting.reporting(self, pcr, 'SnowRAtot', SnowRA)
-# 				if self.mm_rep_FLAG == 1:
-# 					self.QSNOWSubBasinTSS.sample(((SnowRA * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) *1000)
-# 			#-Rain routing
-# 			if self.RainRA_FLAG == 1:
-# 				RainRA = self.routing.ROUT(pcr, RainR, self.RainRAold, self.FlowDir, self.kx)
-# 				self.RainRAold = RainRA
-# 				self.reporting.reporting(self, pcr, 'RainRAtot', RainRA)
-# 				if self.mm_rep_FLAG == 1:
-# 					self.QRAINSubBasinTSS.sample(((RainRA * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) *1000)
-# 			#-Glacier routing
-# 			if self.GlacRA_FLAG == 1 and self.GlacFLAG == 1:
-# 				GlacRA = self.routing.ROUT(pcr, GlacR, self.GlacRAold, self.FlowDir, self.kx)
-# 				self.GlacRAold = GlacRA
-# 				self.reporting.reporting(self, pcr, 'GlacRAtot', GlacRA)
-# 				if self.mm_rep_FLAG == 1:
-# 					self.QGLACSubBasinTSS.sample(((GlacRA * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) *1000)
-# 			#-Baseflow routing
-# 			if self.BaseRA_FLAG == 1:
-# 				BaseRA = self.routing.ROUT(pcr, self.BaseR, self.BaseRAold, self.FlowDir, self.kx)
-# 				self.BaseRAold = BaseRA
-# 				self.reporting.reporting(self, pcr, 'BaseRAtot', BaseRA)
-# 				if self.mm_rep_FLAG == 1:
-# 					self.QBASFSubBasinTSS.sample(((BaseRA * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) *1000)
+			waterbalance = Precip + GlacMelt - ActETact - GlacR - SnowR - RainR -\
+				self.BaseR - (self.SoilWater-OldSoilWater) - (self.TotalSnowStore-OldTotalSnowStore) - (self.Gw-GwOld)
+		elif self.GroundFLAG == 0:
+			waterbalance = Precip - ActETact - self.SeePage - SnowR - RainR - self.BaseR - (self.SoilWater-OldSoilWater) - (self.TotalSnowStore-OldTotalSnowStore)
+		self.reporting.reporting(self, pcr, 'wbal', waterbalance)
+		
+		#-Routing for lake and/or reservoir modules
+		if self.LakeFLAG == 1 or self.ResFLAG == 1:
+			#-Update storage in lakes/reservoirs (m3) with specific runoff
+			self.StorRES = self.StorRES + pcr.ifthenelse(self.QFRAC==0, 0.001 * pcr.cellarea() * (self.BaseR + RainR + GlacR + SnowR), 0)
+			OldStorage = self.StorRES
+			#-Calculate lake/reservoir outflow volumes
+			if self.LakeFLAG ==1 and self.ResFLAG ==1:
+				tempvar = self.lakes.UpdateLakeHStore(self, pcr, pcrm)
+				LakeLevel = tempvar[0]
+				self.StorRES = tempvar[1]
+				LakeQ = self.lakes.QLake(self, pcr, LakeLevel)
+				ResQ = self.reservoirs.QRes(self, pcr)
+				Qout = pcr.ifthenelse(self.ResID != 0, ResQ, pcr.ifthenelse(self.LakeID!=0, LakeQ, 0))
+			elif self.LakeFLAG ==1:
+				tempvar = self.lakes.UpdateLakeHStore(self, pcr, pcrm)
+				LakeLevel = tempvar[0]
+				self.StorRES = tempvar[1]
+				Qout = self.lakes.QLake(self, pcr, LakeLevel)
+			else:
+				Qout = self.reservoirs.QRes(self, pcr)
+
+			#-Calculate volume available for routing (=outflow lakes/reservoir + cell specific runoff)
+			RunoffVolume = pcr.upstream(self.FlowDir, Qout) + pcr.ifthenelse(self.QFRAC==0, 0, 0.001 * pcr.cellarea() * (self.BaseR + RainR + GlacR + SnowR))
+			#-Routing of total flow
+			tempvar = self.routing.ROUT(self, pcr, RunoffVolume, self.QRAold, Qout, self.StorRES)
+			self.StorRES = tempvar[0]
+			Q = tempvar[1]
+			Qin = tempvar[2]
+			self.QRAold = Q
+			self.reporting.reporting(self, pcr, 'QallRAtot', Q)
+			#-report flux in mm
+			if self.mm_rep_FLAG == 1:
+				self.QTOTSubBasinTSS.sample(((Q * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) * 1000)
+			#-report lake and reservoir waterbalance
+			if self.LakeFLAG == 1 and config.getint('REPORTING', 'Lake_wbal') ==1:
+				self.LakeInTSS.sample(Qin)
+				self.LakeOutTSS.sample(Qout) 
+				self.LakeStorTSS.sample(self.StorRES)
+			if self.ResFLAG == 1 and config.getint('REPORTING', 'Res_wbal') ==1:
+				self.ResInTSS.sample(Qin)
+				self.ResOutTSS.sample(Qout) 
+				self.ResStorTSS.sample(self.StorRES)
+
+			#-Routing of individual contributers
+			#-Snow routing
+			if self.SnowRA_FLAG == 1 and self.SnowFLAG == 1:
+				self.SnowRAstor = self.SnowRAstor + pcr.ifthenelse(self.QFRAC==0, SnowR * 0.001 * pcr.cellarea(), 0)
+				cQfrac = pcr.cover(self.SnowRAstor / OldStorage, 0)
+				cQout = cQfrac * Qout
+				cRunoffVolume = pcr.upstream(self.FlowDir, cQout) + pcr.ifthenelse(self.QFRAC==0, 0, 0.001 * pcr.cellarea() * SnowR)
+				tempvar = self.routing.ROUT(self, pcr, cRunoffVolume, self.SnowRAold, cQout, self.SnowRAstor)
+				self.SnowRAstor = tempvar[0]
+				SnowRA = tempvar[1]
+				cQin = tempvar[2]
+				self.SnowRAold = SnowRA
+				self.reporting.reporting(self, pcr, 'SnowRAtot', SnowRA)
+				if self.mm_rep_FLAG == 1:
+					self.QSNOWSubBasinTSS.sample(((SnowRA * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) *1000)
+				#-report lake and reservoir waterbalance
+				if self.LakeFLAG == 1 and config.getint('REPORTING', 'Lake_wbal') ==1:
+					self.LakeSnowInTSS.sample(cQin)
+					self.LakeSnowOutTSS.sample(cQout) 
+					self.LakeSnowStorTSS.sample(self.SnowRAstor)
+				if self.ResFLAG == 1 and config.getint('REPORTING', 'Res_wbal') ==1:
+					self.ResSnowInTSS.sample(cQin)
+					self.ResSnowOutTSS.sample(cQout) 
+					self.ResSnowStorTSS.sample(self.SnowRAstor)
+			#-Rain routing
+			if self.RainRA_FLAG == 1:
+				self.RainRAstor = self.RainRAstor + pcr.ifthenelse(self.QFRAC==0, RainR * 0.001 * pcr.cellarea(), 0)
+				cQfrac = pcr.cover(self.RainRAstor / OldStorage, 0)
+				cQout = cQfrac * Qout
+				cRunoffVolume = pcr.upstream(self.FlowDir, cQout) + pcr.ifthenelse(self.QFRAC==0, 0, 0.001 * pcr.cellarea() * RainR)
+				tempvar = self.routing.ROUT(self, pcr, cRunoffVolume, self.RainRAold, cQout, self.RainRAstor)
+				self.RainRAstor = tempvar[0]
+				RainRA = tempvar[1]
+				cQin = tempvar[2]
+				self.RainRAold = RainRA
+				self.reporting.reporting(self, pcr, 'RainRAtot', RainRA)
+				if self.mm_rep_FLAG == 1:
+					self.QRAINSubBasinTSS.sample(((RainRA * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) *1000)
+				#-report lake and reservoir waterbalance
+				if self.LakeFLAG == 1 and config.getint('REPORTING', 'Lake_wbal') ==1:
+					self.LakeRainInTSS.sample(cQin)
+					self.LakeRainOutTSS.sample(cQout) 
+					self.LakeRainStorTSS.sample(self.RainRAstor)
+				if self.ResFLAG == 1 and config.getint('REPORTING', 'Res_wbal') ==1:
+					self.ResRainInTSS.sample(cQin)
+					self.ResRainOutTSS.sample(cQout) 
+					self.ResRainStorTSS.sample(self.RainRAstor)
+			#-Glacier routing
+			if self.GlacRA_FLAG == 1 and self.GlacFLAG == 1:
+				self.GlacRAstor = self.GlacRAstor + pcr.ifthenelse(self.QFRAC==0, GlacR * 0.001 * pcr.cellarea(), 0)
+				cQfrac = pcr.cover(self.GlacRAstor / OldStorage, 0)
+				cQout = cQfrac * Qout
+				cRunoffVolume = pcr.upstream(self.FlowDir, cQout) + pcr.ifthenelse(self.QFRAC==0, 0, 0.001 * pcr.cellarea() * GlacR)
+				tempvar = self.routing.ROUT(self, pcr, cRunoffVolume, self.GlacRAold, cQout, self.GlacRAstor)
+				self.GlacRAstor = tempvar[0]
+				GlacRA = tempvar[1]
+				cQin = tempvar[2]
+				self.GlacRAold = GlacRA
+				self.reporting.reporting(self, pcr, 'GlacRAtot', GlacRA)
+				if self.mm_rep_FLAG == 1:
+					self.QGLACSubBasinTSS.sample(((GlacRA * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) *1000)
+				#-report lake and reservoir waterbalance
+				if self.LakeFLAG == 1 and config.getint('REPORTING', 'Lake_wbal') ==1:
+					self.LakeGlacInTSS.sample(cQin)
+					self.LakeGlacOutTSS.sample(cQout) 
+					self.LakeGlacStorTSS.sample(self.GlacRAstor)
+				if self.ResFLAG == 1 and config.getint('REPORTING', 'Res_wbal') ==1:
+					self.ResGlacInTSS.sample(cQin)
+					self.ResGlacOutTSS.sample(cQout) 
+					self.ResGlacStorTSS.sample(self.GlacRAstor)
+			#-Baseflow routing
+			if self.BaseRA_FLAG == 1:
+				self.BaseRAstor = self.BaseRAstor + pcr.ifthenelse(self.QFRAC==0, self.BaseR * 0.001 * pcr.cellarea(), 0)
+				cQfrac = pcr.cover(self.BaseRAstor / OldStorage, 0)
+				cQout = cQfrac * Qout
+				cRunoffVolume = pcr.upstream(self.FlowDir, cQout) + pcr.ifthenelse(self.QFRAC==0, 0, 0.001 * pcr.cellarea() * self.BaseR)
+				tempvar = self.routing.ROUT(self, pcr, cRunoffVolume, self.BaseRAold, cQout, self.BaseRAstor)
+				self.BaseRAstor = tempvar[0]
+				BaseRA = tempvar[1]
+				cQin = tempvar[2]
+				self.BaseRAold = BaseRA
+				self.reporting.reporting(self, pcr, 'BaseRAtot', BaseRA)
+				if self.mm_rep_FLAG == 1:
+					self.QBASFSubBasinTSS.sample(((BaseRA * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) *1000)
+				#-report lake and reservoir waterbalance
+				if self.LakeFLAG == 1 and config.getint('REPORTING', 'Lake_wbal') ==1:
+					self.LakeBaseInTSS.sample(cQin)
+					self.LakeBaseOutTSS.sample(cQout) 
+					self.LakeBaseStorTSS.sample(self.BaseRAstor)
+				if self.ResFLAG == 1 and config.getint('REPORTING', 'Res_wbal') ==1:
+					self.ResBaseInTSS.sample(cQin)
+					self.ResBaseOutTSS.sample(cQout) 
+					self.ResBaseStorTSS.sample(self.BaseRAstor)
+						
+		#-Normal routing module	
+		elif self.RoutFLAG == 1:
+			#-Rout total runoff
+			Q = self.routing.ROUT(pcr, self.BaseR + RainR + GlacR + SnowR, self.QRAold, self.FlowDir, self.kx)
+			self.QRAold = Q
+			self.reporting.reporting(self, pcr, 'QallRAtot', Q)
+			if self.mm_rep_FLAG == 1:
+				self.QTOTSubBasinTSS.sample(((Q * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) * 1000)
+			#-Snow routing
+			if self.SnowRA_FLAG == 1 and self.SnowFLAG == 1:
+				SnowRA = self.routing.ROUT(pcr, SnowR, self.SnowRAold, self.FlowDir, self.kx)
+				self.SnowRAold = SnowRA
+				self.reporting.reporting(self, pcr, 'SnowRAtot', SnowRA)
+				if self.mm_rep_FLAG == 1:
+					self.QSNOWSubBasinTSS.sample(((SnowRA * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) *1000)
+			#-Rain routing
+			if self.RainRA_FLAG == 1:
+				RainRA = self.routing.ROUT(pcr, RainR, self.RainRAold, self.FlowDir, self.kx)
+				self.RainRAold = RainRA
+				self.reporting.reporting(self, pcr, 'RainRAtot', RainRA)
+				if self.mm_rep_FLAG == 1:
+					self.QRAINSubBasinTSS.sample(((RainRA * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) *1000)
+			#-Glacier routing
+			if self.GlacRA_FLAG == 1 and self.GlacFLAG == 1:
+				GlacRA = self.routing.ROUT(pcr, GlacR, self.GlacRAold, self.FlowDir, self.kx)
+				self.GlacRAold = GlacRA
+				self.reporting.reporting(self, pcr, 'GlacRAtot', GlacRA)
+				if self.mm_rep_FLAG == 1:
+					self.QGLACSubBasinTSS.sample(((GlacRA * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) *1000)
+			#-Baseflow routing
+			if self.BaseRA_FLAG == 1:
+				BaseRA = self.routing.ROUT(pcr, self.BaseR, self.BaseRAold, self.FlowDir, self.kx)
+				self.BaseRAold = BaseRA
+				self.reporting.reporting(self, pcr, 'BaseRAtot', BaseRA)
+				if self.mm_rep_FLAG == 1:
+					self.QBASFSubBasinTSS.sample(((BaseRA * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) *1000)
 
 		#-update current date				
 		self.curdate = self.curdate + self.datetime.timedelta(days=1)
+		
+		if self.curdate == self.enddate:
+			self.GlacTable.to_csv(self.outpath + 'out.csv')
 
 # END OF SPHY CLASS	
 	
