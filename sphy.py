@@ -545,8 +545,8 @@ class sphy(pcrm.DynamicModel):
 			self.PrecSubBasinTSS = pcrm.TimeoutputTimeseries("PrecSubBasinTSS", self, self.Locations, noHeader=False)
 			self.ETaSubBasinTSS = pcrm.TimeoutputTimeseries("ETaSubBasinTSS", self, self.Locations, noHeader=False)
 		if self.GlacFLAG == 1:
-			pars = ['wbal','GWL','TotPrec','TotPrecF','TotPrecEF','TotIntF','TotRain','TotRainF','TotETpot','TotETpotF','TotETact','TotETactF','TotSnow','TotSnowF','TotSnowMelt','TotSnowMeltF','TotGlacMelt','TotGlacMeltF','TotRootRF','TotRootDF','TotRootPF',\
-				'TotSubPF','TotCapRF','TotGlacPercF','TotGwRechargeF','TotRainRF','TotBaseRF','TotSnowRF','TotGlacRF','TotRF','RainRAtot','SnowRAtot','GlacRAtot','BaseRAtot','QallRAtot']
+			pars = ['wbal','GWL','TotPrec','TotPrecE','TotInt','TotRain','TotETpot','TotETact','TotSnow','TotSnowMelt','TotGlacMelt','TotGlacMelt','TotRootR','TotRootD','TotRootP',\
+				'TotSubP','TotCapR','TotGlacPerc','TotGwRecharge','TotRainR','TotBaseR','TotSnowR','TotGlacR','TotR','RainRAtot','SnowRAtot','GlacRAtot','BaseRAtot','QallRAtot']
 			#-set time-series reporting for mm fluxes from upstream area if glacier and routing/reservoir modules are used
 			if self.mm_rep_FLAG == 1 and (self.RoutFLAG == 1 or self.ResFLAG == 1 or self.LakeFLAG == 1):
 				self.GMeltSubBasinTSS = pcrm.TimeoutputTimeseries("GMeltSubBasinTSS", self, self.Locations, noHeader=False)
@@ -557,8 +557,8 @@ class sphy(pcrm.DynamicModel):
 				self.QTOTSubBasinTSS = pcrm.TimeoutputTimeseries("QTOTSubBasinTSS", self, self.Locations, noHeader=False)
 		elif self.SnowFLAG == 1:
 			if self.GroundFLAG == 1:		
-				pars = ['wbal','GWL','TotPrec','TotPrecF','TotPrecEF','TotIntF','TotRain','TotRainF','TotETpot','TotETpotF','TotETact','TotETactF','TotSnow','TotSnowF','TotSnowMelt','TotSnowMeltF','TotRootRF','TotRootDF','TotRootPF',\
-					'TotSubPF','TotCapRF','TotGwRechargeF','TotRainRF','TotBaseRF','TotSnowRF','TotRF','RainRAtot','SnowRAtot','BaseRAtot','QallRAtot']
+				pars = ['wbal','GWL','TotPrec','TotPrecE','TotInt','TotRain','TotETpot','TotETact','TotSnow','TotSnowMelt','TotRootR','TotRootD','TotRootP',\
+					'TotSubP','TotCapR','TotGwRecharge','TotRainR','TotBaseR','TotSnowR','TotR','RainRAtot','SnowRAtot','BaseRAtot','QallRAtot']
 				#-set time-series reporting for mm fluxes from upstream area if snow, groundwater and routing/reservoir modules are used
 				if self.mm_rep_FLAG == 1 and (self.RoutFLAG == 1 or self.ResFLAG == 1 or self.LakeFLAG == 1):
 					self.QSNOWSubBasinTSS = pcrm.TimeoutputTimeseries("QSNOWSubBasinTSS", self, self.Locations, noHeader=False)
@@ -566,8 +566,8 @@ class sphy(pcrm.DynamicModel):
 					self.QBASFSubBasinTSS = pcrm.TimeoutputTimeseries("QBASFSubBasinTSS", self, self.Locations, noHeader=False)
 					self.QTOTSubBasinTSS = pcrm.TimeoutputTimeseries("QTOTSubBasinTSS", self, self.Locations, noHeader=False)
 			else:
-				pars = ['wbal','GWL','TotPrec','TotPrecF','TotPrecEF','TotIntF','TotRain','TotRainF','TotETpot','TotETpotF','TotETact','TotETactF','TotSnow','TotSnowF','TotSnowMelt','TotSnowMeltF','TotRootRF','TotRootDF','TotRootPF',\
-					'TotSubDF','TotCapRF','TotSeepF','TotRainRF','TotSnowRF','TotRF','RainRAtot','SnowRAtot','BaseRAtot','QallRAtot']
+				pars = ['wbal','GWL','TotPrec','TotPrecE','TotInt','TotRain','TotETpot','TotETact','TotSnow','TotSnowMelt','TotRootR','TotRootD','TotRootP',\
+					'TotSubD','TotCapR','TotSeep','TotRainR','TotSnowR','TotR','RainRAtot','SnowRAtot','BaseRAtot','QallRAtot']
 				#-set time-series reporting for mm fluxes from upstream area if snow and routing/reservoir modules are used
 				if self.mm_rep_FLAG == 1 and (self.RoutFLAG == 1 or self.ResFLAG == 1 or self.LakeFLAG == 1):
 					self.SeepSubBasinTSS = pcrm.TimeoutputTimeseries("SeepSubBasinTSS", self, self.Locations, noHeader=False)
@@ -577,16 +577,16 @@ class sphy(pcrm.DynamicModel):
 					self.QTOTSubBasinTSS = pcrm.TimeoutputTimeseries("QTOTSubBasinTSS", self, self.Locations, noHeader=False)
 		else:
 			if self.GroundFLAG == 1:
-				pars = ['wbal','GWL','TotPrec','TotPrecF','TotPrecEF','TotIntF','TotRain','TotRainF','TotETpot','TotETpotF','TotETact','TotETactF','TotRootRF','TotRootDF','TotRootPF',\
-					'TotSubPF','TotCapRF','TotGwRechargeF','TotRainRF','TotBaseRF','TotRF','RainRAtot','BaseRAtot','QallRAtot']
+				pars = ['wbal','GWL','TotPrec','TotPrecE','TotInt','TotRain','TotETpot','TotETact','TotRootR','TotRootD','TotRootP',\
+					'TotSubP','TotCapR','TotGwRecharge','TotRainR','TotBaseR','TotR','RainRAtot','BaseRAtot','QallRAtot']
 				#-set time-series reporting for mm fluxes from upstream area if groundwater and routing/reservoir modules are used
 				if self.mm_rep_FLAG == 1 and (self.RoutFLAG == 1 or self.ResFLAG == 1 or self.LakeFLAG == 1):
 					self.QRAINSubBasinTSS = pcrm.TimeoutputTimeseries("QRAINSubBasinTSS", self, self.Locations, noHeader=False)
 					self.QBASFSubBasinTSS = pcrm.TimeoutputTimeseries("QBASFSubBasinTSS", self, self.Locations, noHeader=False)
 					self.QTOTSubBasinTSS = pcrm.TimeoutputTimeseries("QTOTSubBasinTSS", self, self.Locations, noHeader=False)
 			else:
-				pars = ['wbal','GWL','TotPrec','TotPrecF','TotPrecEF','TotIntF','TotRain','TotRainF','TotETpot','TotETpotF','TotETact','TotETactF','TotRootRF','TotRootDF','TotRootPF',\
-					'TotSubDF','TotCapRF','TotSeepF','TotRainRF','TotRF','RainRAtot','BaseRAtot','QallRAtot']
+				pars = ['wbal','GWL','TotPrec','TotPrecE','TotInt','TotRain','TotETpot','TotETact','TotRootR','TotRootD','TotRootP',\
+					'TotSubD','TotCapR','TotSeep','TotRainR','TotR','RainRAtot','BaseRAtot','QallRAtot']
 				#-set time-series reporting for mm fluxes from upstream area if routing/reservoir modules are used
 				if self.mm_rep_FLAG == 1 and (self.RoutFLAG == 1 or self.ResFLAG == 1 or self.LakeFLAG == 1):
 					self.SeepSubBasinTSS = pcrm.TimeoutputTimeseries("SeepSubBasinTSS", self, self.Locations, noHeader=False)
@@ -699,8 +699,6 @@ class sphy(pcrm.DynamicModel):
 		Precip = pcr.readmap(pcrm.generateNameT(self.Prec, self.counter))
 		#-Report Precip  
 		self.reporting.reporting(self, pcr, 'TotPrec', Precip)
-		#####MAYBE REMOVE THE FRACTIONAL REPORTING OF PRECIP)
-# 		self.reporting.reporting(self, pcr, 'TotPrecF', Precip * (1-self.GlacFrac))
 		
 		#-Temperature and reference evapotranspiration
 		Temp = pcr.readmap(pcrm.generateNameT(self.Tair, self.counter))
@@ -732,16 +730,14 @@ class sphy(pcrm.DynamicModel):
 			intercep = self.dynamic_veg.Inter_function(pcr, self.Scanopy, vegoutput[1], ETref)
 			#-interception
 			Int = intercep[0]
-# 			#-report interception corrected for fraction
-# 			self.reporting.reporting(self, pcr, 'TotIntF', Int * (1-self.GlacFrac))
 			#-report interception
-			self.reporting.reporting(self, pcr, 'TotIntF', Int)
-			#-effective precipitation
-			Precip = intercep[1]
-# 			#-Report effective precipitation corrected for fraction
-# 			self.reporting.reporting(self, pcr, 'TotPrecEF', Precip * (1-self.GlacFrac))
+			self.reporting.reporting(self, pcr, 'TotInt', Int * (1-self.GlacFrac))
+			#-effective precipitation for model cel
+# 			Precip = intercep[1]
+			Precip = intercep[1] * (1-self.GlacFrac) + Precip * self.GlacFrac
 			#-Report effective precipitation
-			self.reporting.reporting(self, pcr, 'TotPrecEF', Precip)
+# 			self.reporting.reporting(self, pcr, 'TotPrecE', Precip * (1-self.GlacFrac))
+			self.reporting.reporting(self, pcr, 'TotPrecE', Precip)
 			#-canopy storage
 			self.Scanopy = intercep[2]
 		elif self.KcStatFLAG == 0:
@@ -753,7 +749,6 @@ class sphy(pcrm.DynamicModel):
 				self.Kc = self.KcOld
 		#-report mm effective precipitation for sub-basin averages		
 		if self.mm_rep_FLAG == 1 and (self.RoutFLAG == 1 or self.ResFLAG == 1 or self.LakeFLAG == 1):
-# 			self.PrecSubBasinTSS.sample(pcr.catchmenttotal(Precip * (1-self.GlacFrac), self.FlowDir) / pcr.catchmenttotal(1, self.FlowDir))		
 			self.PrecSubBasinTSS.sample(pcr.catchmenttotal(Precip, self.FlowDir) / pcr.catchmenttotal(1, self.FlowDir))
 
 		#-Snow, rain, and glacier calculations for glacier fraction of cell
@@ -836,9 +831,14 @@ class sphy(pcrm.DynamicModel):
 			mask = None; del mask
 			
 			#-Initiate model id and glacier id aggregation tables 
-			GlacTable_MODid = self.GlacTable.loc[:,['Prec_GLAC', 'Rain_GLAC', 'Snow_GLAC', 'ActSnowMelt_GLAC', 'SnowStore_GLAC',\
+			GlacTable_MODid = self.GlacTable.loc[:,['Rain_GLAC', 'Snow_GLAC', 'ActSnowMelt_GLAC', 'SnowStore_GLAC',\
 									'SnowWatStore_GLAC', 'TotalSnowStore_GLAC', 'SnowR_GLAC', 'GlacMelt', 'GlacR', 'GlacPerc']]
-			GlacTable_GLACid = GlacTable_MODid.copy()
+			GlacTable_GLACid = GlacTable_MODid.copy(); 
+			#####--> IMPLEMENT HERE WHICH VARIABLES NEED TO BE IN THE GLACIER ID TABLE FOR REPORTING. THE MODEL ID TABLE ABOVE
+			#####	 ONLY NEEDS Rain_GLAC, Snow_GLAC, ActSnowMelt_GLAC, TotalSnowStore_GLAC, SnowR_GLAC, GlacMelt, GlacR, en GlacPerc need to be 
+			
+			
+			GlacTable_GLACid['Prec_GLAC'] = self.GlacTable['Prec_GLAC']
 			#-Multiply with the glacier fraction
 			GlacTable_MODid = GlacTable_MODid.multiply(self.GlacTable['FRAC_GLAC'], axis='index')
 			GlacTable_GLACid = GlacTable_GLACid.multiply(self.GlacTable['FRAC_GLAC'], axis='index')
@@ -857,43 +857,36 @@ class sphy(pcrm.DynamicModel):
 			Rain_GLAC[self.GlacTrue] = GlacTable_MODid['Rain_GLAC']
 			Rain_GLAC = Rain_GLAC.reshape(self.ModelID.shape)
 			Rain_GLAC = pcr.numpy2pcr(Scalar, Rain_GLAC, -9999)
-			pcr.report(Rain_GLAC, self.outpath + 'Rain_GLAC.map')
 			#-Snowfall on glacier
 			Snow_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)  #-YES
 			Snow_GLAC[self.GlacTrue] = GlacTable_MODid['Snow_GLAC']
 			Snow_GLAC = Snow_GLAC.reshape(self.ModelID.shape)
 			Snow_GLAC = pcr.numpy2pcr(Scalar, Snow_GLAC, -9999)
-			pcr.report(Snow_GLAC, self.outpath + 'Snow_GLAC.map')
 			#-Act snowmelt from glacier
 			ActSnowMelt_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)   #-YES
 			ActSnowMelt_GLAC[self.GlacTrue] = GlacTable_MODid['ActSnowMelt_GLAC']
 			ActSnowMelt_GLAC = ActSnowMelt_GLAC.reshape(self.ModelID.shape)
 			ActSnowMelt_GLAC = pcr.numpy2pcr(Scalar, ActSnowMelt_GLAC, -9999)
-			pcr.report(ActSnowMelt_GLAC, self.outpath + 'ActSnowMelt_GLAC.map')
 			#-Snowstore on glacier
 			SnowStore_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)
 			SnowStore_GLAC[self.GlacTrue] = GlacTable_MODid['SnowStore_GLAC']
 			SnowStore_GLAC = SnowStore_GLAC.reshape(self.ModelID.shape)
 			SnowStore_GLAC = pcr.numpy2pcr(Scalar, SnowStore_GLAC, -9999)
-			pcr.report(Snow_GLAC, self.outpath + 'SnowStore_GLAC.map')
 			#-SnowWatStore on glacier
 			SnowWatStore_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)
 			SnowWatStore_GLAC[self.GlacTrue] = GlacTable_MODid['SnowWatStore_GLAC']
 			SnowWatStore_GLAC = SnowWatStore_GLAC.reshape(self.ModelID.shape)
 			SnowWatStore_GLAC = pcr.numpy2pcr(Scalar, SnowWatStore_GLAC, -9999)
-			pcr.report(SnowWatStore_GLAC, self.outpath + 'SnowWatStore_GLAC.map')
 			#-TotalSnowStore on glacier
 			TotalSnowStore_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)  #-YES
 			TotalSnowStore_GLAC[self.GlacTrue] = GlacTable_MODid['TotalSnowStore_GLAC']
 			TotalSnowStore_GLAC = TotalSnowStore_GLAC.reshape(self.ModelID.shape)
 			TotalSnowStore_GLAC = pcr.numpy2pcr(Scalar, TotalSnowStore_GLAC, -9999)
-			pcr.report(TotalSnowStore_GLAC, self.outpath + 'TotalSnowStore_GLAC.map')
 			#-SnowR from glacier
 			SnowR_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)  #-YES
 			SnowR_GLAC[self.GlacTrue] = GlacTable_MODid['SnowR_GLAC']
 			SnowR_GLAC = SnowR_GLAC.reshape(self.ModelID.shape)
 			SnowR_GLAC = pcr.numpy2pcr(Scalar, SnowR_GLAC, -9999)
-			pcr.report(SnowR_GLAC, self.outpath + 'SnowR_GLAC.map')
 			#-Glacier melt
 			GlacMelt = pcr.numpy.zeros(self.ModelID_1d.shape)  #-YES
 			GlacMelt[self.GlacTrue] = GlacTable_MODid['GlacMelt']
@@ -907,15 +900,14 @@ class sphy(pcrm.DynamicModel):
 			GlacR = GlacR.reshape(self.ModelID.shape)
 			GlacR = pcr.numpy2pcr(Scalar, GlacR, -9999)
 			#-Report glacier runoff
-			self.reporting.reporting(self, pcr, 'TotGlacRF', GlacR)
-			pcr.report(GlacR, self.outpath + 'GlacR.map')
+			self.reporting.reporting(self, pcr, 'TotGlacR', GlacR)
 			#-Glacier percolation 
 			GlacPerc = pcr.numpy.zeros(self.ModelID_1d.shape)  #-YES
 			GlacPerc[self.GlacTrue] = GlacTable_MODid['GlacPerc']
 			GlacPerc = GlacPerc.reshape(self.ModelID.shape)
 			GlacPerc = pcr.numpy2pcr(Scalar, GlacPerc, -9999)
 			#-Report glacier percolation to groundwater
-			self.reporting.reporting(self, pcr, 'TotGlacPercF', GlacPerc)
+			self.reporting.reporting(self, pcr, 'TotGlacPerc', GlacPerc)
 		#-If glacier module is not used, then
 		else:
 			Rain_GLAC = 0  #-YES
@@ -923,9 +915,9 @@ class sphy(pcrm.DynamicModel):
 			ActSnowMelt_GLAC = 0  #-YES
 			TotalSnowStore_GLAC = 0  #-YES
 			SnowR_GLAC = 0  #-YES
-			GlacR = 0
-			GlacMelt = 0
-			GlacPerc = 0
+			GlacR = 0  #-YES
+			GlacMelt = 0  #-YES
+			GlacPerc = 0  #-YES
 
 		# Snow and rain for non-glacier part of cell
 		if self.SnowFLAG == 1:
@@ -934,13 +926,11 @@ class sphy(pcrm.DynamicModel):
 			Rain = pcr.ifthenelse(Temp < self.Tcrit, 0, Precip)
 			#-Report Snow
 			self.reporting.reporting(self, pcr, 'TotSnow', Snow * (1-self.GlacFrac) + Snow_GLAC)
-# 			self.reporting.reporting(self, pcr, 'TotSnowF', Snow * (1-self.GlacFrac))
 			#-Snow melt
 			PotSnowMelt = self.snow.PotSnowMelt(pcr, Temp, self.DDFS)
 			ActSnowMelt = self.snow.ActSnowMelt(pcr, self.SnowStore, PotSnowMelt)
 			#-Report snow melt
 			self.reporting.reporting(self, pcr, 'TotSnowMelt', ActSnowMelt * (1-self.GlacFrac) + ActSnowMelt_GLAC)
-# 			self.reporting.reporting(self, pcr, 'TotSnowMeltF', ActSnowMelt * SnowFrac)
 			#-Update snow store
 			self.SnowStore = self.snow.SnowStoreUpdate(pcr, self.SnowStore, Snow, ActSnowMelt, Temp, self.SnowWatStore)
 			#-Caclulate the maximum amount of water that can be stored in snowwatstore
@@ -954,7 +944,7 @@ class sphy(pcrm.DynamicModel):
 			#-Snow runoff
 			SnowR = self.snow.SnowR(pcr, self.SnowWatStore, MaxSnowWatStore, ActSnowMelt, Rain, OldSnowWatStore, SnowFrac) + SnowR_GLAC
 			#-Report Snow runoff
-			self.reporting.reporting(self, pcr, 'TotSnowRF', SnowR)
+			self.reporting.reporting(self, pcr, 'TotSnowR', SnowR)
 		else:
 			Rain = Precip
 			SnowR = 0
@@ -963,7 +953,6 @@ class sphy(pcrm.DynamicModel):
 			
 		#-Report Rain
 		self.reporting.reporting(self, pcr, 'TotRain', Rain * (1-self.GlacFrac) + Rain_GLAC)
-# 		self.reporting.reporting(self, pcr, 'TotRainF', Rain * (1-self.GlacFrac))
 
 # 		#-Glacier calculations
 # 		if self.GlacFLAG == 1:
@@ -994,8 +983,7 @@ class sphy(pcrm.DynamicModel):
 		#-Potential evapotranspiration (THIS SHOULD STILL BE IMPROVED WITH DYNAMIC VEGETATION MODULE)
 		ETpot = self.ET.ETpot(ETref, self.Kc) 
 		#-Report ETpot
-		self.reporting.reporting(self, pcr, 'TotETpot', ETpot)
-		self.reporting.reporting(self, pcr, 'TotETpotF', ETpot * RainFrac)
+		self.reporting.reporting(self, pcr, 'TotETpot', ETpot * RainFrac)
 				
 		#-Rootzone calculations
 		self.RootWater = self.RootWater + pcr.ifthenelse(RainFrac > 0, Rain, 0) + self.CapRise
@@ -1005,12 +993,10 @@ class sphy(pcrm.DynamicModel):
 		#-Actual evapotranspiration
 		etreddry = pcr.max(pcr.min((self.RootWater - self.RootDry) / (self.RootWilt - self.RootDry), 1), 0)
 		ETact = self.ET.ETact(pcr, ETpot, self.RootWater, self.RootSat, etreddry, RainFrac)
-		#-Report the actual evapotranspiration
-		self.reporting.reporting(self, pcr, 'TotETact', ETact)
 		#-Actual evapotranspiration, corrected for rain fraction
 		ActETact = ETact * RainFrac	
-		#-Report the actual evapotranspiration, corrected for rain fraction
-		self.reporting.reporting(self, pcr, 'TotETactF', ActETact)
+		#-Report the actual evapotranspiration
+		self.reporting.reporting(self, pcr, 'TotETact', ActETact)
 		if self.mm_rep_FLAG == 1 and (self.RoutFLAG == 1 or self.ResFLAG == 1 or self.LakeFLAG == 1):
 			self.ETaSubBasinTSS.sample(pcr.catchmenttotal(ActETact, self.FlowDir) / pcr.catchmenttotal(1, self.FlowDir))
 		#-Update rootwater content
@@ -1021,8 +1007,8 @@ class sphy(pcrm.DynamicModel):
 		self.RootWater = self.RootWater - self.RootDrain
 		#-Rootwater percolation
 		rootperc = self.rootzone.RootPercolation(pcr, self.RootWater, self.SubWater, self.RootField, self.RootTT, self.SubSat)
-		#-Report rootzone percolation, corrected for fraction
-		self.reporting.reporting(self, pcr, 'TotRootPF', rootperc * (1 - self.GlacFrac))
+		#-Report rootzone percolation
+		self.reporting.reporting(self, pcr, 'TotRootP', rootperc * (1 - self.GlacFrac))
 		#-Update rootwater content
 		self.RootWater = self.RootWater - rootperc
 		
@@ -1036,27 +1022,27 @@ class sphy(pcrm.DynamicModel):
 				except:
 					self.SeePage = self.SeepOld
 			#-Report seepage
-			self.reporting.reporting(self, pcr, 'TotSeepF', pcr.scalar(self.SeePage))
+			self.reporting.reporting(self, pcr, 'TotSeep', pcr.scalar(self.SeePage))
 			self.SubWater = pcr.min(pcr.max(self.SubWater - self.SeePage, 0), self.SubSat)
 			if self.mm_rep_FLAG == 1 and (self.RoutFLAG == 1 or self.ResFLAG == 1 or self.LakeFLAG == 1):
 				self.SeepSubBasinTSS.sample(pcr.catchmenttotal(self.SeePage, self.FlowDir) / pcr.catchmenttotal(1, self.FlowDir))
 		#-Capillary rise
 		self.CapRise = self.subzone.CapilRise(pcr, self.SubField, self.SubWater, self.CapRiseMax, self.RootWater, self.RootSat, self.RootField)
-		#-Report capillary rise, corrected for fraction
-		self.reporting.reporting(self, pcr, 'TotCapRF', self.CapRise * (1-self.GlacFrac))
+		#-Report capillary rise
+		self.reporting.reporting(self, pcr, 'TotCapR', self.CapRise * (1-self.GlacFrac))
 		#-Update sub soil water content
 		self.SubWater = self.SubWater - self.CapRise
 		if self.GroundFLAG == 1:   # sub percolation will be calculated instead of subdrainage
 			subperc = self.subzone.SubPercolation(pcr, self.SubWater, self.SubField, self.SubTT, self.Gw, self.GwSat)
 			ActSubPerc = subperc * (1-self.GlacFrac)
-			#-Report the subzone percolation, corrected for the fraction
-			self.reporting.reporting(self, pcr, 'TotSubPF', ActSubPerc) 
+			#-Report the subzone percolation
+			self.reporting.reporting(self, pcr, 'TotSubP', ActSubPerc) 
 			#-Update sub soil water content
 			self.SubWater = self.SubWater - subperc
 		else: # sub drainage will be calculated instead of sub percolation
 			self.SubDrain = self.subzone.SubDrainage(pcr, self.SubWater, self.SubField, self.SubSat, self.SubDrainVel, self.SubDrain, self.SubTT)
 			#-Report drainage from subzone
-			self.reporting.reporting(self, pcr, 'TotSubDF', self.SubDrain)
+			self.reporting.reporting(self, pcr, 'TotSubD', self.SubDrain)
 			#-Update sub soil water content
 			self.SubWater = self.SubWater - self.SubDrain
 			
@@ -1066,16 +1052,16 @@ class sphy(pcrm.DynamicModel):
 
 		#-Rootzone runoff
 		RootR = RootRunoff * RainFrac
-		#-Report rootzone runoff, corrected for fraction
-		self.reporting.reporting(self, pcr, 'TotRootRF', RootR)
+		#-Report rootzone runoff
+		self.reporting.reporting(self, pcr, 'TotRootR', RootR)
 		#-Rootzone drainage
 		RootD = self.RootDrain * (1-self.GlacFrac)
-		#-Report rootzone drainage, corrected for fraction
-		self.reporting.reporting(self, pcr, 'TotRootDF', RootD)
+		#-Report rootzone drainage
+		self.reporting.reporting(self, pcr, 'TotRootD', RootD)
 		#-Rain runoff
 		RainR = RootR + RootD
 		#-Report rain runoff
-		self.reporting.reporting(self, pcr, 'TotRainRF', RainR)
+		self.reporting.reporting(self, pcr, 'TotRainR', RainR)
 		
 		#-Groundwater calculations
 		if self.GroundFLAG == 1:
@@ -1083,13 +1069,13 @@ class sphy(pcrm.DynamicModel):
 			#-Groundwater recharge
 			self.GwRecharge = self.groundwater.GroundWaterRecharge(pcr,	self.deltaGw, self.GwRecharge, ActSubPerc, GlacPerc)
 			#-Report groundwater recharge
-			self.reporting.reporting(self, pcr, 'TotGwRechargeF', self.GwRecharge)
+			self.reporting.reporting(self, pcr, 'TotGwRecharge', self.GwRecharge)
 			#-Update groundwater storage
 			self.Gw = self.Gw + self.GwRecharge
 			#-Baseflow
 			self.BaseR = self.groundwater.BaseFlow(pcr, self.Gw, self.BaseR, self.GwRecharge, self.BaseThresh, self.alphaGw)
 			#-Report Baseflow
-			self.reporting.reporting(self, pcr, 'TotBaseRF', self.BaseR)
+			self.reporting.reporting(self, pcr, 'TotBaseR', self.BaseR)
 			#-Update groundwater storage
 			self.Gw = self.Gw - self.BaseR
 			#-Calculate groundwater level
@@ -1108,7 +1094,7 @@ class sphy(pcrm.DynamicModel):
 			self.reporting.reporting(self, pcr, 'GWL', GWL)
 			
 		#-Report Total runoff
-		self.reporting.reporting(self, pcr, 'TotRF', self.BaseR + RainR + SnowR + GlacR)
+		self.reporting.reporting(self, pcr, 'TotR', self.BaseR + RainR + SnowR + GlacR)
 
 		#-Water balance
 		if self.GroundFLAG == 1:
