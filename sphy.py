@@ -1,13 +1,14 @@
 #***********************************************************************************************
 # THE SPATIAL PROCESSES IN HYDROLOGY (SPHY) MODEL IS DEVELOPED AND OWNED BY FUTUREWATER.
 # AUTHOR: W. Terink
-# DATE LATEST CHANGE: 16-06-2015
+# DATE LATEST CHANGE: 03-07-2016
 # VERSION 2.1
 #***********************************************************************************************
 
 # This model uses the sphy_config.cfg as configuration file.
 
 import time, shutil, os, glob, ConfigParser
+from dateutil.relativedelta import relativedelta
 import pandas as pd
 import pcraster as pcr
 import pcraster.framework as pcrm
@@ -54,9 +55,9 @@ class sphy(pcrm.DynamicModel):
 		if self.GlacFLAG == 1:
 			self.SnowFLAG = 1
 			self.GroundFLAG = 1
-			import glacier # glacier melting processes
-			self.glacier = glacier
-			del glacier
+# 			import glacier # glacier melting processes
+# 			self.glacier = glacier
+# 			del glacier
 		if self.SnowFLAG == 1:
 			import snow # snow melt processes
 			self.snow = snow
@@ -555,6 +556,15 @@ class sphy(pcrm.DynamicModel):
 				self.QGLACSubBasinTSS = pcrm.TimeoutputTimeseries("QGLACSubBasinTSS", self, self.Locations, noHeader=False)
 				self.QBASFSubBasinTSS = pcrm.TimeoutputTimeseries("QBASFSubBasinTSS", self, self.Locations, noHeader=False)
 				self.QTOTSubBasinTSS = pcrm.TimeoutputTimeseries("QTOTSubBasinTSS", self, self.Locations, noHeader=False)
+			#-Initialize reporting per glacier ID
+			self.GlacID_flag = config.getint('REPORTING', 'GlacID_flag')
+			if self.GlacID_flag:
+				self.GlacID_month = config.getint('REPORTING', 'GlacID_month') #-flag to aggregate to monthly output at end of model simulation 
+				self.GlacVars = config.get('REPORTING', 'GlacID_report').split(',')  #-get the variables to report
+				glacid = sorted(self.GlacTable['GLAC_ID'].unique())  #-get the unique glacier ids
+				drange = pd.date_range(self.startdate, self.enddate, freq='D')
+				for p in self.GlacVars: #-make panda dataframes for each variable to report
+					setattr(self, p + '_Table', pd.DataFrame(index = drange, columns=glacid,dtype=float))  #-create table for each variable to report
 		elif self.SnowFLAG == 1:
 			if self.GroundFLAG == 1:		
 				pars = ['wbal','GWL','TotPrec','TotPrecE','TotInt','TotRain','TotETpot','TotETact','TotSnow','TotSnowMelt','TotRootR','TotRootD','TotRootP',\
@@ -692,9 +702,6 @@ class sphy(pcrm.DynamicModel):
 		SnowFrac = pcr.ifthenelse(self.SnowStore > 0, pcr.scalar(1 - self.GlacFrac), 0)
 		RainFrac = pcr.ifthenelse(self.SnowStore == 0, pcr.scalar(1 - self.GlacFrac), 0)
 		
-		pcr.report(SnowFrac, self.outpath + 'snowfrac.map')
-		pcr.report(RainFrac, self.outpath + 'rainfrac.map')
-
 		#-Read the precipitation time-series
 		Precip = pcr.readmap(pcrm.generateNameT(self.Prec, self.counter))
 		#-Report Precip  
@@ -733,10 +740,8 @@ class sphy(pcrm.DynamicModel):
 			#-report interception
 			self.reporting.reporting(self, pcr, 'TotInt', Int * (1-self.GlacFrac))
 			#-effective precipitation for model cel
-# 			Precip = intercep[1]
 			Precip = intercep[1] * (1-self.GlacFrac) + Precip * self.GlacFrac
 			#-Report effective precipitation
-# 			self.reporting.reporting(self, pcr, 'TotPrecE', Precip * (1-self.GlacFrac))
 			self.reporting.reporting(self, pcr, 'TotPrecE', Precip)
 			#-canopy storage
 			self.Scanopy = intercep[2]
@@ -761,9 +766,6 @@ class sphy(pcrm.DynamicModel):
 			T = None; T_1d = None; del T, T_1d
 			#-lapse temperature for glaciers
 			self.GlacTable['GLAC_T'] = self.GlacTable['MOD_T'] - (self.GlacTable['MOD_H'] - self.GlacTable['GLAC_H']) * self.TLapse
-			
-			self.GlacTable['GLAC_T'] = self.GlacTable['GLAC_T'] + 15 ###### DUMMY TO HIGH VALUE FOR TESTIGN -> REMOVE THIS LINE LATER
-			
 			#-1 dim array of Precip map
 			P_1d = pcr.pcr2numpy(Precip, -9999).flatten()  	
 			P = pd.DataFrame(data={'Prec_GLAC': P_1d[self.GlacTrue]}, index=self.ModelID_1d[self.GlacTrue])
@@ -829,95 +831,106 @@ class sphy(pcrm.DynamicModel):
 			#-Glacier percolation consisting of melt only
 			self.GlacTable.loc[pcr.numpy.invert(mask), 'GlacPerc'] = (1-self.GlacF) * self.GlacTable.loc[pcr.numpy.invert(mask), 'GlacMelt']
 			mask = None; del mask
-			
-			#-Initiate model id and glacier id aggregation tables 
+		
+			#-Reporting for each glacier ID
+			if self.GlacID_flag:
+				GlacTable_GLACid = self.GlacTable.loc[:, self.GlacVars]
+				GlacTable_GLACid = GlacTable_GLACid.multiply(self.GlacTable['FRAC_GLAC'], axis='index')  #-Multiply with fraction
+				GlacTable_GLACid['GLAC_ID'] = self.GlacTable['GLAC_ID']; GlacTable_GLACid['FRAC_GLAC'] = self.GlacTable['FRAC_GLAC']  #-Add GLAC_ID column and FRAC_GLAC column
+				GlacTable_GLACid = GlacTable_GLACid.groupby(GlacTable_GLACid['GLAC_ID']).sum() #-Summarize by Glacier ID and divide by total fraction for glacier weighted average
+				GlacTable_GLACid = GlacTable_GLACid.div(GlacTable_GLACid['FRAC_GLAC'], axis='index')
+				GlacTable_GLACid = GlacTable_GLACid.transpose()  #-Transpose the glacier id table (ID as columns and vars as index)
+				#-Fill Glacier variable tables for reporting
+				for v in self.GlacVars:
+					vv = getattr(self, v + '_Table'); vv.loc[self.curdate,:] = GlacTable_GLACid.loc[v,:]
+				v = None; vv = None; del v, vv; GlacTable_GLACid = None; del GlacTable_GLACid
+				if self.curdate == self.enddate: #-do the reporting at the final model time-step
+					for v in self.GlacVars:
+						eval('self.' + v + '_Table.to_csv("'  + self.outpath + v + '.csv")')
+					if self.GlacID_month: #-Aggregate by month
+						for v in self.GlacVars:
+							if v in ['SnowStore_GLAC', 'SnowWatStore_GLAC' , 'TotalSnowStore_GLAC']:
+								mvar = eval('self.' + v + '_Table.groupby(self.' + v + '_Table.index.month).mean()')
+							else:
+								years = relativedelta(self.enddate, self.startdate).years + 1
+								mvar = eval('self.' + v + '_Table.groupby(self.' + v + '_Table.index.month).sum() / years')
+							eval('mvar.to_csv("'  + self.outpath + v + '_monthly.csv")')
+							
+			#-Aggregation for model grid ID 
 			GlacTable_MODid = self.GlacTable.loc[:,['Rain_GLAC', 'Snow_GLAC', 'ActSnowMelt_GLAC', 'SnowStore_GLAC',\
 									'SnowWatStore_GLAC', 'TotalSnowStore_GLAC', 'SnowR_GLAC', 'GlacMelt', 'GlacR', 'GlacPerc']]
-			GlacTable_GLACid = GlacTable_MODid.copy(); 
-			#####--> IMPLEMENT HERE WHICH VARIABLES NEED TO BE IN THE GLACIER ID TABLE FOR REPORTING. THE MODEL ID TABLE ABOVE
-			#####	 ONLY NEEDS Rain_GLAC, Snow_GLAC, ActSnowMelt_GLAC, TotalSnowStore_GLAC, SnowR_GLAC, GlacMelt, GlacR, en GlacPerc need to be 
-			
-			
-			GlacTable_GLACid['Prec_GLAC'] = self.GlacTable['Prec_GLAC']
-			#-Multiply with the glacier fraction
-			GlacTable_MODid = GlacTable_MODid.multiply(self.GlacTable['FRAC_GLAC'], axis='index')
-			GlacTable_GLACid = GlacTable_GLACid.multiply(self.GlacTable['FRAC_GLAC'], axis='index')
-			#-Add GLAC_ID column and FRAC_GLAC column
-			GlacTable_GLACid['GLAC_ID'] = self.GlacTable['GLAC_ID']; GlacTable_GLACid['FRAC_GLAC'] = self.GlacTable['FRAC_GLAC']
-			#-set GLAC_ID as index
-			GlacTable_GLACid.index = GlacTable_GLACid['GLAC_ID']; del GlacTable_GLACid['GLAC_ID']  #-remove the GLAC_ID column
-			#-Do the aggregation
-			GlacTable_MODid = GlacTable_MODid.groupby(GlacTable_MODid.index).sum() #-For model ID
-			GlacTable_GLACid = GlacTable_GLACid.groupby(GlacTable_GLACid.index).sum() #-For Glacier ID and divide by total fraction for glacier weighted average
-			GlacTable_GLACid = GlacTable_GLACid.div(GlacTable_GLACid['FRAC_GLAC'], axis='index')
-			
+			GlacTable_MODid = GlacTable_MODid.multiply(self.GlacTable['FRAC_GLAC'], axis='index') #-Multiply with the glacier fraction
+			GlacTable_MODid = GlacTable_MODid.groupby(GlacTable_MODid.index).sum() #-Summarize by model ID
 			#-report back to model ID
 			#-Rainfall on glacier
-			Rain_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)  #-YES
+			Rain_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)
 			Rain_GLAC[self.GlacTrue] = GlacTable_MODid['Rain_GLAC']
 			Rain_GLAC = Rain_GLAC.reshape(self.ModelID.shape)
 			Rain_GLAC = pcr.numpy2pcr(Scalar, Rain_GLAC, -9999)
 			#-Snowfall on glacier
-			Snow_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)  #-YES
+			Snow_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)
 			Snow_GLAC[self.GlacTrue] = GlacTable_MODid['Snow_GLAC']
 			Snow_GLAC = Snow_GLAC.reshape(self.ModelID.shape)
 			Snow_GLAC = pcr.numpy2pcr(Scalar, Snow_GLAC, -9999)
 			#-Act snowmelt from glacier
-			ActSnowMelt_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)   #-YES
+			ActSnowMelt_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)
 			ActSnowMelt_GLAC[self.GlacTrue] = GlacTable_MODid['ActSnowMelt_GLAC']
 			ActSnowMelt_GLAC = ActSnowMelt_GLAC.reshape(self.ModelID.shape)
 			ActSnowMelt_GLAC = pcr.numpy2pcr(Scalar, ActSnowMelt_GLAC, -9999)
-			#-Snowstore on glacier
-			SnowStore_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)
-			SnowStore_GLAC[self.GlacTrue] = GlacTable_MODid['SnowStore_GLAC']
-			SnowStore_GLAC = SnowStore_GLAC.reshape(self.ModelID.shape)
-			SnowStore_GLAC = pcr.numpy2pcr(Scalar, SnowStore_GLAC, -9999)
-			#-SnowWatStore on glacier
-			SnowWatStore_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)
-			SnowWatStore_GLAC[self.GlacTrue] = GlacTable_MODid['SnowWatStore_GLAC']
-			SnowWatStore_GLAC = SnowWatStore_GLAC.reshape(self.ModelID.shape)
-			SnowWatStore_GLAC = pcr.numpy2pcr(Scalar, SnowWatStore_GLAC, -9999)
+# 			#-Snowstore on glacier
+# 			SnowStore_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)
+# 			SnowStore_GLAC[self.GlacTrue] = GlacTable_MODid['SnowStore_GLAC']
+# 			SnowStore_GLAC = SnowStore_GLAC.reshape(self.ModelID.shape)
+# 			SnowStore_GLAC = pcr.numpy2pcr(Scalar, SnowStore_GLAC, -9999)
+# 			#-SnowWatStore on glacier
+# 			SnowWatStore_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)
+# 			SnowWatStore_GLAC[self.GlacTrue] = GlacTable_MODid['SnowWatStore_GLAC']
+# 			SnowWatStore_GLAC = SnowWatStore_GLAC.reshape(self.ModelID.shape)
+# 			SnowWatStore_GLAC = pcr.numpy2pcr(Scalar, SnowWatStore_GLAC, -9999)
 			#-TotalSnowStore on glacier
-			TotalSnowStore_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)  #-YES
+			TotalSnowStore_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)
 			TotalSnowStore_GLAC[self.GlacTrue] = GlacTable_MODid['TotalSnowStore_GLAC']
 			TotalSnowStore_GLAC = TotalSnowStore_GLAC.reshape(self.ModelID.shape)
 			TotalSnowStore_GLAC = pcr.numpy2pcr(Scalar, TotalSnowStore_GLAC, -9999)
 			#-SnowR from glacier
-			SnowR_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)  #-YES
+			SnowR_GLAC = pcr.numpy.zeros(self.ModelID_1d.shape)
 			SnowR_GLAC[self.GlacTrue] = GlacTable_MODid['SnowR_GLAC']
 			SnowR_GLAC = SnowR_GLAC.reshape(self.ModelID.shape)
 			SnowR_GLAC = pcr.numpy2pcr(Scalar, SnowR_GLAC, -9999)
 			#-Glacier melt
-			GlacMelt = pcr.numpy.zeros(self.ModelID_1d.shape)  #-YES
+			GlacMelt = pcr.numpy.zeros(self.ModelID_1d.shape)
 			GlacMelt[self.GlacTrue] = GlacTable_MODid['GlacMelt']
 			GlacMelt = GlacMelt.reshape(self.ModelID.shape)
 			GlacMelt = pcr.numpy2pcr(Scalar, GlacMelt, -9999)
 			#-Report glacier melt
 			self.reporting.reporting(self, pcr, 'TotGlacMelt', GlacMelt)
+			if self.mm_rep_FLAG == 1 and (self.RoutFLAG == 1 or self.ResFLAG == 1 or self.LakeFLAG == 1):
+				self.GMeltSubBasinTSS.sample(pcr.catchmenttotal(GlacMelt * self.GlacFrac, self.FlowDir) / pcr.catchmenttotal(1, self.FlowDir))
 			#-Glacier runoff
-			GlacR = pcr.numpy.zeros(self.ModelID_1d.shape)  #-YES
+			GlacR = pcr.numpy.zeros(self.ModelID_1d.shape)
 			GlacR[self.GlacTrue] = GlacTable_MODid['GlacR']
 			GlacR = GlacR.reshape(self.ModelID.shape)
 			GlacR = pcr.numpy2pcr(Scalar, GlacR, -9999)
 			#-Report glacier runoff
 			self.reporting.reporting(self, pcr, 'TotGlacR', GlacR)
 			#-Glacier percolation 
-			GlacPerc = pcr.numpy.zeros(self.ModelID_1d.shape)  #-YES
+			GlacPerc = pcr.numpy.zeros(self.ModelID_1d.shape)
 			GlacPerc[self.GlacTrue] = GlacTable_MODid['GlacPerc']
 			GlacPerc = GlacPerc.reshape(self.ModelID.shape)
 			GlacPerc = pcr.numpy2pcr(Scalar, GlacPerc, -9999)
 			#-Report glacier percolation to groundwater
 			self.reporting.reporting(self, pcr, 'TotGlacPerc', GlacPerc)
+			GlacTable_MODid = None; del GlacTable_MODid
 		#-If glacier module is not used, then
 		else:
-			Rain_GLAC = 0  #-YES
-			Snow_GLAC = 0  #-YES
-			ActSnowMelt_GLAC = 0  #-YES
-			TotalSnowStore_GLAC = 0  #-YES
-			SnowR_GLAC = 0  #-YES
-			GlacR = 0  #-YES
-			GlacMelt = 0  #-YES
-			GlacPerc = 0  #-YES
+			Rain_GLAC = 0
+			Snow_GLAC = 0
+			ActSnowMelt_GLAC = 0
+			TotalSnowStore_GLAC = 0
+			SnowR_GLAC = 0
+			GlacR = 0
+			GlacMelt = 0
+			GlacPerc = 0
 
 		# Snow and rain for non-glacier part of cell
 		if self.SnowFLAG == 1:
@@ -950,37 +963,10 @@ class sphy(pcrm.DynamicModel):
 			SnowR = 0
 			OldTotalSnowStore = 0
 			self.TotalSnowStore = 0
-			
 		#-Report Rain
 		self.reporting.reporting(self, pcr, 'TotRain', Rain * (1-self.GlacFrac) + Rain_GLAC)
 
-# 		#-Glacier calculations
-# 		if self.GlacFLAG == 1:
-# 			#-Glacier melt from clean ice glaciers
-# 			GlacCIMelt = self.glacier.GlacCDMelt(pcr, Temp, self.DDFG, self.GlacFracCI)
-# 			#-Glacier melt from debris covered glaciers
-# 			GlacDCMelt = self.glacier.GlacCDMelt(pcr, Temp, self.DDFDG, self.GlacFracDB)
-# 			#-Total melt from glaciers
-# 			GlacMelt = self.glacier.GMelt(GlacCIMelt, GlacDCMelt)
-# 			#-Report glacier melt
-# 			self.reporting.reporting(self, pcr, 'TotGlacMelt', GlacMelt)
-# 			self.reporting.reporting(self, pcr, 'TotGlacMeltF', GlacMelt * self.GlacFrac)
-# 			if self.mm_rep_FLAG == 1 and (self.RoutFLAG == 1 or self.ResFLAG == 1 or self.LakeFLAG == 1):
-# 				self.GMeltSubBasinTSS.sample(pcr.catchmenttotal(GlacMelt * self.GlacFrac, self.FlowDir) / pcr.catchmenttotal(1, self.FlowDir))
-# 			#-Glacier runoff
-# 			GlacR = self.glacier.GlacR(self.GlacF, GlacMelt, self.GlacFrac)
-# 			#-Report glacier runoff
-# 			self.reporting.reporting(self, pcr, 'TotGlacRF', GlacR)
-# 			#-Glacier percolation to groundwater
-# 			GlacPerc = self.glacier.GPerc(self.GlacF, GlacMelt, self.GlacFrac)
-# 			#-Report glacier percolation to groundwater
-# 			self.reporting.reporting(self, pcr, 'TotGlacPercF', GlacPerc)
-# 		else:
-# 			GlacR = 0
-# 			GlacMelt = 0
-# 			GlacPerc = 0
-# 		
-		#-Potential evapotranspiration (THIS SHOULD STILL BE IMPROVED WITH DYNAMIC VEGETATION MODULE)
+		#-Potential evapotranspiration
 		ETpot = self.ET.ETpot(ETref, self.Kc) 
 		#-Report ETpot
 		self.reporting.reporting(self, pcr, 'TotETpot', ETpot * RainFrac)
@@ -1082,7 +1068,6 @@ class sphy(pcrm.DynamicModel):
 			self.H_gw = self.groundwater.HLevel(pcr, self.H_gw, self.alphaGw, self.GwRecharge, self.YieldGw)
 			#-Report groundwater
 			self.reporting.reporting(self, pcr, 'GWL', ((self.SubDepthFlat + self.RootDepthFlat + self.GwDepth)/1000 - self.H_gw)*-1)
-
 		else:
 			#-Use drainage from subsoil as baseflow
 			self.BaseR = self.SubDrain
@@ -1098,8 +1083,6 @@ class sphy(pcrm.DynamicModel):
 
 		#-Water balance
 		if self.GroundFLAG == 1:
-# 			waterbalance = Precip * (1-self.GlacFrac) + GlacMelt * self.GlacFrac - ActETact - GlacR - SnowR - RainR -\
-# 				self.BaseR - (self.SoilWater-OldSoilWater) - (self.TotalSnowStore-OldTotalSnowStore) - (self.Gw-GwOld)
 			waterbalance = Precip + GlacMelt - ActETact - GlacR - SnowR - RainR -\
 				self.BaseR - (self.SoilWater-OldSoilWater) - (self.TotalSnowStore-OldTotalSnowStore) - (self.Gw-GwOld)
 		elif self.GroundFLAG == 0:
@@ -1283,9 +1266,6 @@ class sphy(pcrm.DynamicModel):
 		#-update current date				
 		self.curdate = self.curdate + self.datetime.timedelta(days=1)
 		
-		if self.curdate == self.enddate:
-			self.GlacTable.to_csv(self.outpath + 'out.csv')
-
 # END OF SPHY CLASS	
 	
 SPHY = sphy()
