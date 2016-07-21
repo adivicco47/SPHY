@@ -215,6 +215,8 @@ class sphy(pcrm.DynamicModel):
 										'MaxSnowWatStore_GLAC', 'OldTotalSnowStore_GLAC', 'TotalSnowStore_GLAC',\
 										'SnowR_GLAC', 'GlacMelt', 'GlacR', 'GlacPerc'])
 			self.GlacTable = pd.concat([self.GlacTable, cols], axis=1).fillna(0)
+			#-sort on MOD_ID column
+			self.GlacTable.sort_values(by='MOD_ID', inplace=True)
 			#-Read the glacier maps
 # 			self.GlacID = pcr.pcr2numpy(pcr.readmap(os.path.join(self.inpath, config.get('GLACIER', 'GlacID'))), self.MV)  #-Nominal   ->> NOT USED YET
 			self.ModelID = pcr.pcr2numpy(pcr.readmap(os.path.join(self.inpath, config.get('GLACIER', 'ModelID'))), self.MV) #-Nominal
@@ -933,7 +935,7 @@ class sphy(pcrm.DynamicModel):
 			GlacPerc = pcr.numpy2pcr(Scalar, GlacPerc, self.MV)
 			#-Report glacier percolation to groundwater
 			self.reporting.reporting(self, pcr, 'TotGlacPerc', GlacPerc)
-			GlacTable_MODid = None; del GlacTable_MODid
+			#GlacTable_MODid = None; del GlacTable_MODid
 		#-If glacier module is not used, then
 		else:
 			Rain_GLAC = 0
@@ -1278,6 +1280,16 @@ class sphy(pcrm.DynamicModel):
 
 		#-update current date				
 		self.curdate = self.curdate + self.datetime.timedelta(days=1)
+		
+		
+		
+# 		if self.counter == 134:
+# 			print GlacTable_MODid
+# 			print self.GlacTable
+# 			pcr.report(Rain_GLAC, self.outpath + 'rain.map')
+# 			pcr.report(Snow_GLAC, self.outpath + 'snow.map')
+# 			exit(0)
+		
 		
 # END OF SPHY CLASS	
 	
