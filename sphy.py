@@ -1,14 +1,13 @@
 #***********************************************************************************************
 # THE SPATIAL PROCESSES IN HYDROLOGY (SPHY) MODEL IS DEVELOPED AND OWNED BY FUTUREWATER.
 # AUTHOR: W. Terink
-# DATE LATEST CHANGE: 03-07-2016
+# DATE LATEST CHANGE: 04-08-2016
 # VERSION 2.1
 #***********************************************************************************************
 
 # This model uses the sphy_config.cfg as configuration file.
 
 import time, shutil, os, glob, ConfigParser
-from dateutil.relativedelta import relativedelta
 import pandas as pd
 import pcraster as pcr
 import pcraster.framework as pcrm
@@ -865,10 +864,9 @@ class sphy(pcrm.DynamicModel):
 					if self.GlacID_month: #-Aggregate by month
 						for v in self.GlacVars:
 							if v in ['SnowStore_GLAC', 'SnowWatStore_GLAC' , 'TotalSnowStore_GLAC']:
-								mvar = eval('self.' + v + '_Table.groupby(self.' + v + '_Table.index.month).mean()')
+								mvar = eval('self.' + v + '_Table.groupby(self.' + v + '_Table.index.month).last()')
 							else:
-								years = relativedelta(self.enddate, self.startdate).years + 1
-								mvar = eval('self.' + v + '_Table.groupby(self.' + v + '_Table.index.month).sum() / years')
+								mvar = eval('self.' + v + '_Table.groupby(self.' + v + '_Table.index.month).sum()')
 							eval('mvar.to_csv("'  + self.outpath + v + '_monthly.csv")')
 							
 			#-Aggregation for model grid ID 
@@ -1280,16 +1278,6 @@ class sphy(pcrm.DynamicModel):
 
 		#-update current date				
 		self.curdate = self.curdate + self.datetime.timedelta(days=1)
-		
-		
-		
-# 		if self.counter == 134:
-# 			print GlacTable_MODid
-# 			print self.GlacTable
-# 			pcr.report(Rain_GLAC, self.outpath + 'rain.map')
-# 			pcr.report(Snow_GLAC, self.outpath + 'snow.map')
-# 			exit(0)
-		
 		
 # END OF SPHY CLASS	
 	
