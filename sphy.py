@@ -217,10 +217,8 @@ class sphy(pcrm.DynamicModel):
 			#-sort on MOD_ID column
 			self.GlacTable.sort_values(by='MOD_ID', inplace=True)
 			#-Read the glacier maps
-# 			self.GlacID = pcr.pcr2numpy(pcr.readmap(os.path.join(self.inpath, config.get('GLACIER', 'GlacID'))), self.MV)  #-Nominal   ->> NOT USED YET
 			self.ModelID = pcr.pcr2numpy(pcr.readmap(os.path.join(self.inpath, config.get('GLACIER', 'ModelID'))), self.MV) #-Nominal
 			self.ModelID_1d = self.ModelID.flatten()	#-1 dim array with model cell IDs
-# 			self.DebrisMask = pcr.pcr2numpy(pcr.readmap(os.path.join(self.inpath, config.get('GLACIER', 'DebrisMask'))), self.MV)	#-Nominal  ->NOT USED YET
 			SelModelID = pd.unique(self.GlacTable['MOD_ID'])  #-model id cells for which to extract temperature, precip, etc. (=cells that have glaciers)
 			#-Create keys for glacier cells (index in ModelID_1d where cell has glacier)
 			self.GlacierKeys= pcr.numpy.ones(self.ModelID_1d.shape)* self.MV
