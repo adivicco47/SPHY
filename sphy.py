@@ -214,6 +214,7 @@ class sphy(pcrm.DynamicModel):
 										'MaxSnowWatStore_GLAC', 'OldTotalSnowStore_GLAC', 'TotalSnowStore_GLAC',\
 										'SnowR_GLAC', 'GlacMelt', 'GlacR', 'GlacPerc'])
 			self.GlacTable = pd.concat([self.GlacTable, cols], axis=1).fillna(0)
+			
 			#-sort on MOD_ID column
 			self.GlacTable.sort_values(by='MOD_ID', inplace=True)
 			#-Read the glacier maps
@@ -240,6 +241,19 @@ class sphy(pcrm.DynamicModel):
 					setattr(self, i, config.getfloat('GLACIER',i))
 			#-Lapse rate for temperature
 			self.TLapse = config.getfloat('CLIMATE', 'TLapse')
+			#-Check if glacier retreat should be calculated
+			self.GlacRetreat = config.getint('GLACIER','GlacRetreat')
+			if self.GlacRetreat == 1:
+				#-Get date for updating the glacier fraction (once a year)
+				GlacUpdate = config.get('GLACIER', 'GlacUpdate').split(',')
+				self.GlacUpdate = {}
+				self.GlacUpdate['month'] = int(GlacUpdate[1])
+				self.GlacUpdate['day'] = int(GlacUpdate[0])
+# 				#-Create a table with fields used for updating the glacier fraction at defined update date
+# 				self.GlacFracTable = self.GlacTable.loc[:,['U_ID', 'MOD_ID','GLAC_ID','FRAC_GLAC','ICE_DEPTH']]
+# 				#-Set the initial ice volumes and snow store
+# 				self.GlacFracTable['V_ice_t0'] = self.GlacFracTable['FRAC_GLAC'] * self.GlacFracTable['ICE_DEPTH'] * pcr.cellvalue(pcr.cellarea(),1)[0]
+# 				self.GlacFracTable['TotalSnowStore_GLAC_t0'] = 0.
 					
 		#-read and set snow maps and parameters if snow modules are used
 		if self.SnowFLAG:
@@ -478,6 +492,10 @@ class sphy(pcrm.DynamicModel):
 			# 1-D Masks for debris and clean ice
 			self.CImask = self.GlacTable['DEBRIS'] == 0
 			self.DBmask = pcr.numpy.invert(self.CImask)
+			#-Create table for accumulating glacier melt over certain period until glacier fraction should be updated
+			if self.GlacRetreat == 1:
+				self.AccuGlacMelt = pd.DataFrame(data={'GlacMelt': 0.}, index=self.GlacTable.index)
+			
 		else:
 			self.GlacFrac = 0
 			
@@ -831,6 +849,10 @@ class sphy(pcrm.DynamicModel):
 			self.GlacTable.loc[mask, 'GlacMelt'] = pcr.numpy.maximum(self.GlacTable.loc[mask, 'GLAC_T'] - (self.GlacTable.loc[mask, 'OldSnowStore_GLAC'] / self.DDFS), 0) * self.DDFDG
 			mask = (fullMelt & self.DBmask)  #-mask for Debris covered Glacier and full melt
 			self.GlacTable.loc[mask, 'GlacMelt'] = Tmelt.loc[mask] * self.DDFDG
+			#-If glacier retreat is calculated, then summarize glacier melt in accumulated glacier melt table
+			if self.GlacRetreat == 1:
+				self.AccuGlacMelt['GlacMelt'] = self.AccuGlacMelt['GlacMelt'] + self.GlacTable['GlacMelt']
+			
 			
 			#-Glacier runoff
 			mask = self.GlacTable['OldSnowStore_GLAC'] == 0  #-only add rain to glacmelt when there was no snowpack at beginning to time-step
@@ -1273,6 +1295,113 @@ class sphy(pcrm.DynamicModel):
 				self.reporting.reporting(self, pcr, 'BaseRAtot', BaseRA)
 				if self.mm_rep_FLAG == 1:
 					self.QBASFSubBasinTSS.sample(((BaseRA * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) *1000)
+					
+					
+					
+					
+			#-Check if glacier retreat should be calculated
+			if self.GlacFLAG:
+				if self.GlacRetreat == 1 and self.curdate.month == self.GlacUpdate['month'] and self.curdate.day == self.GlacUpdate['day']:
+					#-Create a table with fields used for updating the glacier fraction at defined update date
+					self.GlacFracTable = self.GlacTable.loc[:,['U_ID', 'GLAC_ID','FRAC_GLAC','ICE_DEPTH']]
+					#-Set the initial ice volumes and snow store
+					self.GlacFracTable['V_ice_t0'] = self.GlacFracTable['FRAC_GLAC'] * self.GlacFracTable['ICE_DEPTH'] * pcr.cellvalue(pcr.cellarea(),1)[0]
+					self.GlacFracTable['TotalSnowStore_GLAC'] = self.GlacTable['TotalSnowStore_GLAC']
+					self.GlacFracTable['Accumelt'] = self.AccuGlacMelt['GlacMelt']
+					self.GlacFracTable['dMelt'] = self.GlacFracTable['TotalSnowStore_GLAC'] - self.GlacFracTable['Accumelt']
+					self.GlacFracTable['dMelt'] = self.GlacFracTable['dMelt'] / 1000 * self.GlacFracTable['FRAC_GLAC'] * pcr.cellvalue(pcr.cellarea(),1)[0]  #-convert to m3
+					#-Drop unnecessary columns
+					self.GlacFracTable.drop(['TotalSnowStore_GLAC', 'Accumelt'], axis=1, inplace=True)
+					
+					#-Mask to determine ablation and accumulation UIDs
+					ablMask = self.GlacFracTable['dMelt'] < 0.
+					#-Set the ablation and accumulation in the corresponding fields
+					self.GlacFracTable['Accumulation'] = 0.
+					self.GlacFracTable['Ablation'] = 0.
+					self.GlacFracTable.loc[pcr.numpy.invert(ablMask),'Accumulation'] = self.GlacFracTable.loc[pcr.numpy.invert(ablMask), 'dMelt']
+					self.GlacFracTable.loc[ablMask,'Ablation'] = self.GlacFracTable.loc[ablMask, 'dMelt']
+					#-Set the ice volumes for the ablation UIDs
+					self.GlacFracTable['V_ice_ablation'] = 0.
+					self.GlacFracTable.loc[ablMask,'V_ice_ablation'] = self.GlacFracTable.loc[ablMask,'V_ice_t0']
+					#-Calculate totals per Glacier ID
+					GlacID_grouped = self.GlacFracTable.groupby('GLAC_ID').sum()
+					GlacID_grouped = GlacID_grouped.loc[:,['dMelt', 'Accumulation', 'V_ice_ablation']]
+
+					#-Calculate total delta Melt (dMelt), accumulation, and ice volumes (of ablation cells) for each glacier ID
+					self.GlacFracTable['dMelt_group'] = 0.
+					self.GlacFracTable['Accumulation_group'] = 0.
+					self.GlacFracTable['V_ice_ablation_group'] = 0.
+					for index, row in GlacID_grouped.iterrows():
+						self.GlacFracTable.loc[self.GlacFracTable['GLAC_ID'] == index,'dMelt_group'] = row['dMelt']
+						self.GlacFracTable.loc[self.GlacFracTable['GLAC_ID'] == index,'Accumulation_group'] = row['Accumulation']
+						self.GlacFracTable.loc[self.GlacFracTable['GLAC_ID'] == index,'V_ice_ablation_group'] = row['V_ice_ablation']
+					#-Remove GlacID_grouped table
+					GlacID_grouped = None; del GlacID_grouped
+					#-Mask for determining if redistribution is negative (remove ice from accumulation cells) or positive (add ice to ablation cells)
+					negDistMask = (self.GlacFracTable['dMelt_group'] < 0.) & (self.GlacFracTable['dMelt'] >= 0.)
+					posDistMask = (self.GlacFracTable['dMelt_group'] < 0.) & (self.GlacFracTable['dMelt'] < 0.)
+					#-Calculate the ice redistribution
+					self.GlacFracTable['Ice_redist'] = 0.
+					self.GlacFracTable.loc[negDistMask,'Ice_redist'] = -self.GlacFracTable.loc[negDistMask, 'Accumulation']
+					self.GlacFracTable.loc[posDistMask,'Ice_redist'] = self.GlacFracTable.loc[posDistMask,'V_ice_ablation'] / self.GlacFracTable.loc[posDistMask,'V_ice_ablation_group'] *\
+						self.GlacFracTable.loc[posDistMask,'Accumulation_group']
+					#-Update ice volume
+					self.GlacFracTable['V_ice_t1'] = self.GlacFracTable['V_ice_t0'] + self.GlacFracTable['Accumulation'] + self.GlacFracTable['Ablation'] + self.GlacFracTable['Ice_redist']
+					#-Remove distribution masks
+					negDistMask = None; del negDistMask; posDistMask = None; del posDistMask
+					#-Remove unnecessary columns
+					self.GlacFracTable.drop(['dMelt', 'Accumulation', 'Ablation','V_ice_ablation','dMelt_group',\
+							'Accumulation_group', 'V_ice_ablation_group', 'Ice_redist'], axis=1, inplace=True)
+					#-Calculate where updated ice volume becomes negative and postitive
+					self.GlacFracTable['V_ice_negative'] = pcr.numpy.minimum(0., self.GlacFracTable['V_ice_t1'])
+					self.GlacFracTable['V_ice_positive'] = pcr.numpy.maximum(0., self.GlacFracTable['V_ice_t1'])
+					#-Calculate totals per Glacier ID
+					GlacID_grouped = self.GlacFracTable.groupby('GLAC_ID').sum()
+					GlacID_grouped = GlacID_grouped.loc[:,['V_ice_negative', 'V_ice_positive']]
+					self.GlacFracTable['V_ice_negative_group'] = 0.
+					self.GlacFracTable['V_ice_positive_group'] = 0.
+					for index, row in GlacID_grouped.iterrows():
+						self.GlacFracTable.loc[self.GlacFracTable['GLAC_ID'] == index,'V_ice_negative_group'] = row['V_ice_negative']
+						self.GlacFracTable.loc[self.GlacFracTable['GLAC_ID'] == index,'V_ice_positive_group'] = row['V_ice_positive']
+					#-Remove GlacID_grouped table
+					GlacID_grouped = None; del GlacID_grouped
+					#-Calculate the ice redistribution
+					self.GlacFracTable['Ice_redist'] = self.GlacFracTable['V_ice_positive'] / self.GlacFracTable['V_ice_positive_group'] * self.GlacFracTable['V_ice_negative_group']
+					self.GlacFracTable['Ice_redist'].fillna(0., inplace=True)
+					#-Remove unnecessary columns
+					self.GlacFracTable.drop(['V_ice_negative', 'V_ice_positive', 'V_ice_negative_group', 'V_ice_positive_group'], axis=1, inplace=True)
+					#-Update ice volume
+					self.GlacFracTable['V_ice_t2'] = pcr.numpy.maximum(0., self.GlacFracTable['V_ice_t1'] + self.GlacFracTable['Ice_redist'])
+					#-Update glacier fraction
+					self.GlacFracTable['FRAC_GLAC_new'] = pcr.numpy.minimum(self.GlacFracTable['FRAC_GLAC'], self.GlacFracTable['V_ice_t2'] / \
+						(self.GlacFracTable['ICE_DEPTH'] * pcr.cellvalue(pcr.cellarea(),1)[0]))
+					
+					#-Write new glacier fractions-->
+					print self.GlacFracTable
+					test = self.GlacFracTable.groupby(self.GlacFracTable.index).sum()
+					test.to_csv('e:/Active/2016-003_StatKraft/model/output_test/test.csv')
+					
+					self.GlacFrac = pcr.numpy.zeros(self.ModelID_1d.shape)
+					self.GlacFrac[self.GlacierKeys] = test['FRAC_GLAC_new']
+					self.GlacFrac = self.GlacFrac.reshape(self.ModelID.shape)
+					self.GlacFrac = pcr.numpy2pcr(Scalar, self.GlacFrac, self.MV)
+					self.GlacFrac = pcr.ifthen(self.clone, self.GlacFrac)  #-only use values where clone is True
+					pcr.report(self.GlacFrac, self.outpath + 'glacfrac_new.map')
+					
+	
+						
+					
+					
+					
+					
+					self.GlacFracTable.to_csv('e:/Active/2016-003_StatKraft/model/output_test/zooi2.csv')
+
+
+
+
+					exit(0)
+								
+		
 
 		#-update current date				
 		self.curdate = self.curdate + self.datetime.timedelta(days=1)
