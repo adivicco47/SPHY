@@ -848,7 +848,6 @@ class sphy(pcrm.DynamicModel):
 			if self.GlacRetreat == 1:
 				self.AccuGlacMelt['GlacMelt'] = self.AccuGlacMelt['GlacMelt'] + self.GlacTable['GlacMelt']
 			
-			
 			#-Glacier runoff
 			mask = self.GlacTable['OldSnowStore_GLAC'] == 0  #-only add rain to glacmelt when there was no snowpack at beginning to time-step
 			#-Glacier runoff consisting of melt and rainfall
@@ -1291,9 +1290,6 @@ class sphy(pcrm.DynamicModel):
 				if self.mm_rep_FLAG == 1:
 					self.QBASFSubBasinTSS.sample(((BaseRA * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) *1000)
 					
-					
-					
-					
 			#-Check if glacier retreat should be calculated
 			if self.GlacFLAG:
 				if self.GlacRetreat == 1 and self.curdate.month == self.GlacUpdate['month'] and self.curdate.day == self.GlacUpdate['day']:
@@ -1412,13 +1408,13 @@ class sphy(pcrm.DynamicModel):
 					#-Remove variables that are not needed
 					icedepth = None; del icedepth; GlacTable_MODid = None; del GlacTable_MODid
 
-					#-Finally updated the storage volumes of the 1-glacfrac fraction; otherwise water will be created
-					self.RootWater = self.RootWater * GlacFracOld / self.GlacFLAG
-					self.SubWater = self.SubWater * GlacFracOld / self.GlacFLAG
-					self.SnowStore = self.SnowStore * GlacFracOld / self.GlacFLAG
-					self.SnowWatStore = self.SnowWatStore * GlacFracOld / self.GlacFLAG
-					if self.DynVegFLAG == 1:
-						self.Scanopy = self.Scanopy * GlacFracOld / self.GlacFLAG
+# 					#-Finally updated the storage volumes of the 1-glacfrac fraction; otherwise water will be created
+# 					self.RootWater = self.RootWater * GlacFracOld / self.GlacFLAG
+# 					self.SubWater = self.SubWater * GlacFracOld / self.GlacFLAG
+# 					self.SnowStore = self.SnowStore * GlacFracOld / self.GlacFLAG
+# 					self.SnowWatStore = self.SnowWatStore * GlacFracOld / self.GlacFLAG
+# 					if self.DynVegFLAG == 1:
+# 						self.Scanopy = self.Scanopy * GlacFracOld / self.GlacFLAG
 
 		#-update current date				
 		self.curdate = self.curdate + self.datetime.timedelta(days=1)
