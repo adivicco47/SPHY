@@ -123,6 +123,8 @@ class sphy(pcrm.DynamicModel):
 		pcr.setclone(clonemap)
 		self.clone = pcr.ifthen(pcr.readmap(clonemap), pcr.boolean(1))
 		
+		self.cellArea = pcr.cellvalue(pcr.cellarea(),1)[0]
+		
 		#-read general maps
 		self.DEM = pcr.readmap(self.inpath + config.get('GENERAL','dem'))
 		self.Slope = pcr.readmap(self.inpath + config.get('GENERAL','Slope'))
@@ -477,7 +479,8 @@ class sphy(pcrm.DynamicModel):
 			except:
 				self.GlacTable['SnowWatStore_GLAC'] = self.SnowWatStore
 			self.GlacTable['TotalSnowStore_GLAC']  = self.GlacTable['SnowStore_GLAC'] + self.GlacTable['SnowWatStore_GLAC']
-			
+			#-Create table for accumulating glacier melt over certain period
+			self.GlacTable['AccuGlacMelt'] = 0.
 			#-initialize the glacier fraction
 			self.GlacFrac = pcr.numpy.zeros(self.ModelID_1d.shape)
 			self.GlacFrac[self.GlacierKeys] = self.GlacTable.groupby(self.GlacTable.index).sum()['FRAC_GLAC']
@@ -488,9 +491,6 @@ class sphy(pcrm.DynamicModel):
 			# 1-D Masks for debris and clean ice
 			self.CImask = self.GlacTable['DEBRIS'] == 0
 			self.DBmask = pcr.numpy.invert(self.CImask)
-			#-Create table for accumulating glacier melt over certain period until glacier fraction should be updated
-			if self.GlacRetreat == 1:
-				self.AccuGlacMelt = pd.DataFrame(data={'GlacMelt': 0.}, index=self.GlacTable.index)
 		else:
 			self.GlacFrac = 0
 			
@@ -844,10 +844,8 @@ class sphy(pcrm.DynamicModel):
 			self.GlacTable.loc[mask, 'GlacMelt'] = pcr.numpy.maximum(self.GlacTable.loc[mask, 'GLAC_T'] - (self.GlacTable.loc[mask, 'OldSnowStore_GLAC'] / self.DDFS), 0) * self.DDFDG
 			mask = (fullMelt & self.DBmask)  #-mask for Debris covered Glacier and full melt
 			self.GlacTable.loc[mask, 'GlacMelt'] = Tmelt.loc[mask] * self.DDFDG
-			#-If glacier retreat is calculated, then summarize glacier melt in accumulated glacier melt table
-			if self.GlacRetreat == 1:
-				self.AccuGlacMelt['GlacMelt'] = self.AccuGlacMelt['GlacMelt'] + self.GlacTable['GlacMelt']
-			
+			#-Accumulate glacier melt
+			self.GlacTable['AccuGlacMelt'] = self.GlacTable['AccuGlacMelt'] + self.GlacTable['GlacMelt']
 			#-Glacier runoff
 			mask = self.GlacTable['OldSnowStore_GLAC'] == 0  #-only add rain to glacmelt when there was no snowpack at beginning to time-step
 			#-Glacier runoff consisting of melt and rainfall
@@ -860,28 +858,28 @@ class sphy(pcrm.DynamicModel):
 			self.GlacTable.loc[pcr.numpy.invert(mask), 'GlacPerc'] = (1-self.GlacF) * self.GlacTable.loc[pcr.numpy.invert(mask), 'GlacMelt']
 			mask = None; del mask
 		
-			#-Reporting for each glacier ID
-			if self.GlacID_flag:
-				GlacTable_GLACid = self.GlacTable.loc[:, self.GlacVars]
-				GlacTable_GLACid = GlacTable_GLACid.multiply(self.GlacTable['FRAC_GLAC'], axis='index')  #-Multiply with fraction
-				GlacTable_GLACid['GLAC_ID'] = self.GlacTable['GLAC_ID']; GlacTable_GLACid['FRAC_GLAC'] = self.GlacTable['FRAC_GLAC']  #-Add GLAC_ID column and FRAC_GLAC column
-				GlacTable_GLACid = GlacTable_GLACid.groupby(GlacTable_GLACid['GLAC_ID']).sum() #-Summarize by Glacier ID and divide by total fraction for glacier weighted average
-				GlacTable_GLACid = GlacTable_GLACid.div(GlacTable_GLACid['FRAC_GLAC'], axis='index')
-				GlacTable_GLACid = GlacTable_GLACid.transpose()  #-Transpose the glacier id table (ID as columns and vars as index)
-				#-Fill Glacier variable tables for reporting
-				for v in self.GlacVars:
-					vv = getattr(self, v + '_Table'); vv.loc[self.curdate,:] = GlacTable_GLACid.loc[v,:]
-				v = None; vv = None; del v, vv; GlacTable_GLACid = None; del GlacTable_GLACid
-				if self.curdate == self.enddate: #-do the reporting at the final model time-step
-					for v in self.GlacVars:
-						eval('self.' + v + '_Table.to_csv("'  + self.outpath + v + '.csv")')
-					if self.GlacID_month: #-Aggregate by month
-						for v in self.GlacVars:
-							if v in ['SnowStore_GLAC', 'SnowWatStore_GLAC' , 'TotalSnowStore_GLAC']:
-								mvar = eval('self.' + v + '_Table.groupby(self.' + v + '_Table.index.month).last()')
-							else:
-								mvar = eval('self.' + v + '_Table.groupby(self.' + v + '_Table.index.month).sum()')
-							eval('mvar.to_csv("'  + self.outpath + v + '_monthly.csv")')
+# 			#-Reporting for each glacier ID
+# 			if self.GlacID_flag:
+# 				GlacTable_GLACid = self.GlacTable.loc[:, self.GlacVars]
+# 				GlacTable_GLACid = GlacTable_GLACid.multiply(self.GlacTable['FRAC_GLAC'], axis='index')  #-Multiply with fraction
+# 				GlacTable_GLACid['GLAC_ID'] = self.GlacTable['GLAC_ID']; GlacTable_GLACid['FRAC_GLAC'] = self.GlacTable['FRAC_GLAC']  #-Add GLAC_ID column and FRAC_GLAC column
+# 				GlacTable_GLACid = GlacTable_GLACid.groupby(GlacTable_GLACid['GLAC_ID']).sum() #-Summarize by Glacier ID and divide by total fraction for glacier weighted average
+# 				GlacTable_GLACid = GlacTable_GLACid.div(GlacTable_GLACid['FRAC_GLAC'], axis='index')
+# 				GlacTable_GLACid = GlacTable_GLACid.transpose()  #-Transpose the glacier id table (ID as columns and vars as index)
+# 				#-Fill Glacier variable tables for reporting
+# 				for v in self.GlacVars:
+# 					vv = getattr(self, v + '_Table'); vv.loc[self.curdate,:] = GlacTable_GLACid.loc[v,:]
+# 				v = None; vv = None; del v, vv; GlacTable_GLACid = None; del GlacTable_GLACid
+# 				if self.curdate == self.enddate: #-do the reporting at the final model time-step
+# 					for v in self.GlacVars:
+# 						eval('self.' + v + '_Table.to_csv("'  + self.outpath + v + '.csv")')
+# 					if self.GlacID_month: #-Aggregate by month
+# 						for v in self.GlacVars:
+# 							if v in ['SnowStore_GLAC', 'SnowWatStore_GLAC' , 'TotalSnowStore_GLAC']:
+# 								mvar = eval('self.' + v + '_Table.groupby(self.' + v + '_Table.index.month).last()')
+# 							else:
+# 								mvar = eval('self.' + v + '_Table.groupby(self.' + v + '_Table.index.month).sum()')
+# 							eval('mvar.to_csv("'  + self.outpath + v + '_monthly.csv")')
 							
 			#-Aggregation for model grid ID 
 			GlacTable_MODid = self.GlacTable.loc[:,['Rain_GLAC', 'Snow_GLAC', 'ActSnowMelt_GLAC', 'SnowStore_GLAC',\
@@ -1290,19 +1288,54 @@ class sphy(pcrm.DynamicModel):
 				if self.mm_rep_FLAG == 1:
 					self.QBASFSubBasinTSS.sample(((BaseRA * 3600 * 24) / pcr.catchmenttotal(pcr.cellarea(), self.FlowDir)) *1000)
 					
-			#-Check if glacier retreat should be calculated
 			if self.GlacFLAG:
+				#-Reporting for each glacier ID
+				if self.GlacID_flag:
+					GlacTable_GLACid = self.GlacTable.loc[:, self.GlacVars]
+					GlacTable_GLACid = GlacTable_GLACid.multiply(self.GlacTable['FRAC_GLAC'], axis='index')  #-Multiply with fraction
+					GlacTable_GLACid['GLAC_ID'] = self.GlacTable['GLAC_ID']; GlacTable_GLACid['FRAC_GLAC'] = self.GlacTable['FRAC_GLAC']  #-Add GLAC_ID column and FRAC_GLAC column
+					GlacTable_GLACid = GlacTable_GLACid.groupby(GlacTable_GLACid['GLAC_ID']).sum() #-Summarize by Glacier ID and divide by total fraction for glacier weighted average
+					GlacTable_GLACid = GlacTable_GLACid.div(GlacTable_GLACid['FRAC_GLAC'], axis='index')
+					GlacTable_GLACid = GlacTable_GLACid.transpose()  #-Transpose the glacier id table (ID as columns and vars as index)
+					GlacTable_GLACid.fillna(0., inplace=True)
+					
+					#-Fill Glacier variable tables for reporting
+					for v in self.GlacVars:
+						vv = getattr(self, v + '_Table'); vv.loc[self.curdate,:] = GlacTable_GLACid.loc[v,:]
+					v = None; vv = None; del v, vv; GlacTable_GLACid = None; del GlacTable_GLACid
+					if self.curdate == self.enddate: #-do the reporting at the final model time-step
+						for v in self.GlacVars:
+							eval('self.' + v + '_Table.to_csv("'  + self.outpath + v + '.csv")')
+						if self.GlacID_month: #-Aggregate by month
+							for v in self.GlacVars:
+# 								if v in ['SnowStore_GLAC', 'SnowWatStore_GLAC' , 'TotalSnowStore_GLAC']:
+# 									mvar = eval('self.' + v + '_Table.groupby([self.' + v + '_Table.index.year, self.' + v + '_Table.index.month]).last()')
+# 								else:
+# 									mvar = eval('self.' + v + '_Table.groupby([self.' + v + '_Table.index.year, self.' + v + '_Table.index.month]).sum()')
+# 								try:
+# 									mvar = mvar.groupby(level=1).mean()
+# 								except: #-if only one year, then only one index is created instead of two
+# 									mvar = mvar.groupby(level=0).mean()
+# 								eval('mvar.to_csv("'  + self.outpath + v + '_monthly.csv")')								
+								if v in ['SnowStore_GLAC', 'SnowWatStore_GLAC' , 'TotalSnowStore_GLAC']:
+									mvar = eval('self.' + v + '_Table.groupby(self.' + v + '_Table.index.month).last()')
+								else:
+									mvar = eval('self.' + v + '_Table.groupby(self.' + v + '_Table.index.month).sum()')
+								eval('mvar.to_csv("'  + self.outpath + v + '_monthly.csv")')
+								
+				
+				#-Check if glacier retreat should be calculated
 				if self.GlacRetreat == 1 and self.curdate.month == self.GlacUpdate['month'] and self.curdate.day == self.GlacUpdate['day']:
 					#-Create a table with fields used for updating the glacier fraction at defined update date
 					GlacFracTable = self.GlacTable.loc[:,['U_ID', 'GLAC_ID','FRAC_GLAC','ICE_DEPTH']]
 					#-Set the initial ice volumes and snow store
-					GlacFracTable['V_ice_t0'] = GlacFracTable['FRAC_GLAC'] * GlacFracTable['ICE_DEPTH'] * pcr.cellvalue(pcr.cellarea(),1)[0]
+					GlacFracTable['V_ice_t0'] = GlacFracTable['FRAC_GLAC'] * GlacFracTable['ICE_DEPTH'] * self.cellArea
 					GlacFracTable['TotalSnowStore_GLAC'] = self.GlacTable['TotalSnowStore_GLAC']
-					GlacFracTable['Accumelt'] = self.AccuGlacMelt['GlacMelt']
-					GlacFracTable['dMelt'] = GlacFracTable['TotalSnowStore_GLAC'] - GlacFracTable['Accumelt']
-					GlacFracTable['dMelt'] = GlacFracTable['dMelt'] / 1000 * GlacFracTable['FRAC_GLAC'] * pcr.cellvalue(pcr.cellarea(),1)[0]  #-convert to m3
+					GlacFracTable['AccuGlacMelt'] = self.GlacTable['AccuGlacMelt']
+					GlacFracTable['dMelt'] = GlacFracTable['TotalSnowStore_GLAC'] - GlacFracTable['AccuGlacMelt']
+					GlacFracTable['dMelt'] = GlacFracTable['dMelt'] / 1000 * GlacFracTable['FRAC_GLAC'] * self.cellArea  #-convert to m3
 					#-Drop unnecessary columns
-					GlacFracTable.drop(['TotalSnowStore_GLAC', 'Accumelt'], axis=1, inplace=True)
+					GlacFracTable.drop(['TotalSnowStore_GLAC', 'AccuGlacMelt'], axis=1, inplace=True)
 					
 					#-Mask to determine ablation and accumulation UIDs
 					ablMask = GlacFracTable['dMelt'] < 0.
@@ -1364,7 +1397,7 @@ class sphy(pcrm.DynamicModel):
 					#-Update ice volume
 					GlacFracTable['V_ice_t2'] = pcr.numpy.maximum(0., GlacFracTable['V_ice_t1'] + GlacFracTable['Ice_redist'])
 					#-Update ice thickness
-					GlacFracTable['ICE_DEPTH_new'] = GlacFracTable['V_ice_t2'] / (GlacFracTable['FRAC_GLAC'] * pcr.cellvalue(pcr.cellarea(),1)[0])
+					GlacFracTable['ICE_DEPTH_new'] = GlacFracTable['V_ice_t2'] / (GlacFracTable['FRAC_GLAC'] * self.cellArea)
 					noIceMask = (GlacFracTable['ICE_DEPTH_new'] <=0.)
 					#-Update glacier fraction
 					GlacFracTable['FRAC_GLAC_new'] = GlacFracTable['FRAC_GLAC']
@@ -1378,7 +1411,7 @@ class sphy(pcrm.DynamicModel):
 					self.GlacTable['SnowWatStore_GLAC'] = 0.
 					self.GlacTable['TotalSnowStore_GLAC'] = 0.
 					#-Set accumulated glacier melt to zero as initial condition for next period
-					self.AccuGlacMelt['GlacMelt'] = 0.
+					self.GlacTable['AccuGlacMelt'] = 0.
 					#-Remove the GlacFracTable
 					GlacFracTable = None; del GlacFracTable
 					
@@ -1390,7 +1423,6 @@ class sphy(pcrm.DynamicModel):
 					GlacTable_MODid.fillna(0., inplace=True)
 					
 					#-Write new glacier fraction map
-					GlacFracOld = self.GlacFrac
 					self.GlacFrac = pcr.numpy.zeros(self.ModelID_1d.shape)
 					self.GlacFrac[self.GlacierKeys] = GlacTable_MODid['FRAC_GLAC']
 					self.GlacFrac = self.GlacFrac.reshape(self.ModelID.shape)
@@ -1408,13 +1440,6 @@ class sphy(pcrm.DynamicModel):
 					#-Remove variables that are not needed
 					icedepth = None; del icedepth; GlacTable_MODid = None; del GlacTable_MODid
 
-# 					#-Finally updated the storage volumes of the 1-glacfrac fraction; otherwise water will be created
-# 					self.RootWater = self.RootWater * GlacFracOld / self.GlacFLAG
-# 					self.SubWater = self.SubWater * GlacFracOld / self.GlacFLAG
-# 					self.SnowStore = self.SnowStore * GlacFracOld / self.GlacFLAG
-# 					self.SnowWatStore = self.SnowWatStore * GlacFracOld / self.GlacFLAG
-# 					if self.DynVegFLAG == 1:
-# 						self.Scanopy = self.Scanopy * GlacFracOld / self.GlacFLAG
 
 		#-update current date				
 		self.curdate = self.curdate + self.datetime.timedelta(days=1)
