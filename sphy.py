@@ -590,6 +590,9 @@ class sphy(pcrm.DynamicModel):
 				drange = pd.date_range(self.startdate, self.enddate, freq='D')
 				for p in self.GlacVars: #-make panda dataframes for each variable to report
 					setattr(self, p + '_Table', pd.DataFrame(index = drange, columns=glacid,dtype=float))  #-create table for each variable to report
+				if self.GlacRetreat == 1: #-then also report average ice depth per glacier and total glacier fraction
+					self.iceDepth_Table = pd.DataFrame(index = drange, columns=glacid,dtype=float)
+					self.Frac_Table = pd.DataFrame(index = drange, columns=glacid,dtype=float)
 		elif self.SnowFLAG == 1:
 			if self.GroundFLAG == 1:		
 				pars = ['wbal','GWL','TotPrec','TotPrecE','TotInt','TotRain','TotETpot','TotETact','TotSnow','TotSnowMelt','TotRootR','TotRootD','TotRootP',\
@@ -857,30 +860,7 @@ class sphy(pcrm.DynamicModel):
 			#-Glacier percolation consisting of melt only
 			self.GlacTable.loc[pcr.numpy.invert(mask), 'GlacPerc'] = (1-self.GlacF) * self.GlacTable.loc[pcr.numpy.invert(mask), 'GlacMelt']
 			mask = None; del mask
-		
-# 			#-Reporting for each glacier ID
-# 			if self.GlacID_flag:
-# 				GlacTable_GLACid = self.GlacTable.loc[:, self.GlacVars]
-# 				GlacTable_GLACid = GlacTable_GLACid.multiply(self.GlacTable['FRAC_GLAC'], axis='index')  #-Multiply with fraction
-# 				GlacTable_GLACid['GLAC_ID'] = self.GlacTable['GLAC_ID']; GlacTable_GLACid['FRAC_GLAC'] = self.GlacTable['FRAC_GLAC']  #-Add GLAC_ID column and FRAC_GLAC column
-# 				GlacTable_GLACid = GlacTable_GLACid.groupby(GlacTable_GLACid['GLAC_ID']).sum() #-Summarize by Glacier ID and divide by total fraction for glacier weighted average
-# 				GlacTable_GLACid = GlacTable_GLACid.div(GlacTable_GLACid['FRAC_GLAC'], axis='index')
-# 				GlacTable_GLACid = GlacTable_GLACid.transpose()  #-Transpose the glacier id table (ID as columns and vars as index)
-# 				#-Fill Glacier variable tables for reporting
-# 				for v in self.GlacVars:
-# 					vv = getattr(self, v + '_Table'); vv.loc[self.curdate,:] = GlacTable_GLACid.loc[v,:]
-# 				v = None; vv = None; del v, vv; GlacTable_GLACid = None; del GlacTable_GLACid
-# 				if self.curdate == self.enddate: #-do the reporting at the final model time-step
-# 					for v in self.GlacVars:
-# 						eval('self.' + v + '_Table.to_csv("'  + self.outpath + v + '.csv")')
-# 					if self.GlacID_month: #-Aggregate by month
-# 						for v in self.GlacVars:
-# 							if v in ['SnowStore_GLAC', 'SnowWatStore_GLAC' , 'TotalSnowStore_GLAC']:
-# 								mvar = eval('self.' + v + '_Table.groupby(self.' + v + '_Table.index.month).last()')
-# 							else:
-# 								mvar = eval('self.' + v + '_Table.groupby(self.' + v + '_Table.index.month).sum()')
-# 							eval('mvar.to_csv("'  + self.outpath + v + '_monthly.csv")')
-							
+					
 			#-Aggregation for model grid ID 
 			GlacTable_MODid = self.GlacTable.loc[:,['Rain_GLAC', 'Snow_GLAC', 'ActSnowMelt_GLAC', 'SnowStore_GLAC',\
 									'SnowWatStore_GLAC', 'TotalSnowStore_GLAC', 'SnowR_GLAC', 'GlacMelt', 'GlacR', 'GlacPerc']]
@@ -1292,38 +1272,44 @@ class sphy(pcrm.DynamicModel):
 				#-Reporting for each glacier ID
 				if self.GlacID_flag:
 					GlacTable_GLACid = self.GlacTable.loc[:, self.GlacVars]
+					if self.GlacRetreat == 1: #-if glacier retreat is calculated, then also monitor ice depth balance ( + snowstore) and area
+						GlacTable_GLACid['ICE_DEPTH'] = self.GlacTable['ICE_DEPTH'] + (self.GlacTable['TotalSnowStore_GLAC'] / 1000)
+						
+					#-Muliply with fraction, summarize, and divide by total fraction to get glacier ID average 
 					GlacTable_GLACid = GlacTable_GLACid.multiply(self.GlacTable['FRAC_GLAC'], axis='index')  #-Multiply with fraction
 					GlacTable_GLACid['GLAC_ID'] = self.GlacTable['GLAC_ID']; GlacTable_GLACid['FRAC_GLAC'] = self.GlacTable['FRAC_GLAC']  #-Add GLAC_ID column and FRAC_GLAC column
-					GlacTable_GLACid = GlacTable_GLACid.groupby(GlacTable_GLACid['GLAC_ID']).sum() #-Summarize by Glacier ID and divide by total fraction for glacier weighted average
-					GlacTable_GLACid = GlacTable_GLACid.div(GlacTable_GLACid['FRAC_GLAC'], axis='index')
+					GlacTable_GLACid = GlacTable_GLACid.groupby('GLAC_ID').sum() #-Summarize by Glacier ID and divide by total fraction for glacier weighted average
+					FracSum = GlacTable_GLACid['FRAC_GLAC'] #-Get summed glacier fraction					
+					GlacTable_GLACid = GlacTable_GLACid.div(FracSum, axis='index') #-Area weighted average (frac==1)
+					GlacTable_GLACid['FRAC_GLAC'] = FracSum; FracSum = None; del FracSum  
 					GlacTable_GLACid = GlacTable_GLACid.transpose()  #-Transpose the glacier id table (ID as columns and vars as index)
-					GlacTable_GLACid.fillna(0., inplace=True)
-					
+					GlacTable_GLACid.fillna(0., inplace=True);
 					#-Fill Glacier variable tables for reporting
 					for v in self.GlacVars:
 						vv = getattr(self, v + '_Table'); vv.loc[self.curdate,:] = GlacTable_GLACid.loc[v,:]
+					if self.GlacRetreat == 1: #-if glacier retreat is calculated, the updated the icedepth table
+						self.iceDepth_Table.loc[self.curdate,:] = GlacTable_GLACid.loc['ICE_DEPTH',:]
+						self.Frac_Table.loc[self.curdate,:] = GlacTable_GLACid.loc['FRAC_GLAC',:]
 					v = None; vv = None; del v, vv; GlacTable_GLACid = None; del GlacTable_GLACid
 					if self.curdate == self.enddate: #-do the reporting at the final model time-step
 						for v in self.GlacVars:
 							eval('self.' + v + '_Table.to_csv("'  + self.outpath + v + '.csv")')
+						if self.GlacRetreat == 1:
+							self.iceDepth_Table.to_csv(self.outpath + 'IceDepth.csv')
+							self.Frac_Table.to_csv(self.outpath + 'Frac.csv')
 						if self.GlacID_month: #-Aggregate by month
 							for v in self.GlacVars:
-# 								if v in ['SnowStore_GLAC', 'SnowWatStore_GLAC' , 'TotalSnowStore_GLAC']:
-# 									mvar = eval('self.' + v + '_Table.groupby([self.' + v + '_Table.index.year, self.' + v + '_Table.index.month]).last()')
-# 								else:
-# 									mvar = eval('self.' + v + '_Table.groupby([self.' + v + '_Table.index.year, self.' + v + '_Table.index.month]).sum()')
-# 								try:
-# 									mvar = mvar.groupby(level=1).mean()
-# 								except: #-if only one year, then only one index is created instead of two
-# 									mvar = mvar.groupby(level=0).mean()
-# 								eval('mvar.to_csv("'  + self.outpath + v + '_monthly.csv")')								
 								if v in ['SnowStore_GLAC', 'SnowWatStore_GLAC' , 'TotalSnowStore_GLAC']:
-									mvar = eval('self.' + v + '_Table.groupby(self.' + v + '_Table.index.month).last()')
+									mvar = eval('self.' + v + '_Table.groupby([self.' + v + '_Table.index.year, self.' + v + '_Table.index.month]).last()')
 								else:
-									mvar = eval('self.' + v + '_Table.groupby(self.' + v + '_Table.index.month).sum()')
+									mvar = eval('self.' + v + '_Table.groupby([self.' + v + '_Table.index.year, self.' + v + '_Table.index.month]).sum()')
 								eval('mvar.to_csv("'  + self.outpath + v + '_monthly.csv")')
-								
-				
+							if self.GlacRetreat == 1:
+								mvar = self.iceDepth_Table.groupby([self.iceDepth_Table.index.year, self.iceDepth_Table.index.month]).last()
+								mvar.to_csv(self.outpath + 'IceDepth_monthly.csv')
+								mvar = self.Frac_Table.groupby([self.Frac_Table.index.year, self.Frac_Table.index.month]).last()
+								mvar.to_csv(self.outpath + 'Frac_monthly.csv')
+
 				#-Check if glacier retreat should be calculated
 				if self.GlacRetreat == 1 and self.curdate.month == self.GlacUpdate['month'] and self.curdate.day == self.GlacUpdate['day']:
 					#-Create a table with fields used for updating the glacier fraction at defined update date
@@ -1355,6 +1341,7 @@ class sphy(pcrm.DynamicModel):
 					GlacFracTable['dMelt_group'] = 0.
 					GlacFracTable['Accumulation_group'] = 0.
 					GlacFracTable['V_ice_ablation_group'] = 0.
+
 					for index, row in GlacID_grouped.iterrows():
 						GlacFracTable.loc[GlacFracTable['GLAC_ID'] == index,'dMelt_group'] = row['dMelt']
 						GlacFracTable.loc[GlacFracTable['GLAC_ID'] == index,'Accumulation_group'] = row['Accumulation']
@@ -1439,7 +1426,6 @@ class sphy(pcrm.DynamicModel):
 					pcr.report(icedepth, self.outpath + 'IceDepth_' + self.curdate.strftime('%Y%m%d') + '.map')
 					#-Remove variables that are not needed
 					icedepth = None; del icedepth; GlacTable_MODid = None; del GlacTable_MODid
-
 
 		#-update current date				
 		self.curdate = self.curdate + self.datetime.timedelta(days=1)
