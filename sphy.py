@@ -244,8 +244,6 @@ class sphy(pcrm.DynamicModel):
 					setattr(self, i, config.getfloat('GLACIER',i))
 			#-Lapse rate for temperature
 			self.TLapse_table = pd.read_csv(self.inpath + config.get('CLIMATE','TLapse'), header=None, index_col=0, sep=' ', skipinitialspace =True)
-			
-			#self.TLapse = config.getfloat('CLIMATE', 'TLapse')
 			#-Map with glacier IDs
 			self.GlacID = pcr.readmap(self.inpath + config.get('GLACIER','GlacID'))
 			#-Check if glacier retreat should be calculated
@@ -836,10 +834,7 @@ class sphy(pcrm.DynamicModel):
 			self.GlacTable.update(T)
 			T = None; T_1d = None; del T, T_1d
 			#-lapse temperature for glaciers
-			#self.GlacTable['GLAC_T'] = self.GlacTable['MOD_T'] - (self.GlacTable['MOD_H'] - self.GlacTable['GLAC_H']) * self.TLapse
-			Tlapse = float(self.TLapse_table.loc[self.curdate.month])
-			print Tlapse
-			self.GlacTable['GLAC_T'] = self.GlacTable['MOD_T'] - (self.GlacTable['MOD_H'] - self.GlacTable['GLAC_H']) * Tlapse
+			self.GlacTable['GLAC_T'] = self.GlacTable['MOD_T'] - (self.GlacTable['MOD_H'] - self.GlacTable['GLAC_H']) * float(self.TLapse_table.loc[self.curdate.month])
 			#-1 dim array of Precip map
 			P_1d = pcr.pcr2numpy(Precip, self.MV).flatten()  	
 			P = pd.DataFrame(data={'Prec_GLAC': P_1d[self.GlacierKeys]}, index=self.ModelID_1d[self.GlacierKeys])
@@ -1450,8 +1445,7 @@ class sphy(pcrm.DynamicModel):
 					GlacTable_MODid['ICE_DEPTH'] = GlacTable_MODid['ICE_DEPTH'] * GlacTable_MODid['FRAC_GLAC']
 					GlacTable_MODid['AREA'] = GlacTable_MODid['FRAC_GLAC'] * self.cellArea
 					GlacTable_MODid = GlacTable_MODid.groupby(GlacTable_MODid.index).sum()
-
-					#GlacTable_MODid.fillna(0., inplace=True)
+					GlacTable_MODid.fillna(0., inplace=True)
 					
 					#-Report updated glacier fraction map
 					self.GlacFrac = pcr.numpy.zeros(self.ModelID_1d.shape)
