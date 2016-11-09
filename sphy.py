@@ -12,7 +12,7 @@ import pandas as pd
 import pcraster as pcr
 import pcraster.framework as pcrm
 from pcraster._pcraster import Scalar
-from time import strftime
+#from time import strftime
 
 tic = time.clock()
 
@@ -104,6 +104,7 @@ class sphy(pcrm.DynamicModel):
 		ed = config.getint('TIMING', 'endday')
 		self.startdate = self.datetime.datetime(sy,sm,sd)
 		self.enddate = self.datetime.datetime(ey,em,ed)
+		self.dateAfterUpdate = self.startdate - self.datetime.timedelta(days=1)  #-only required for glacier retreat (create dummy value here to introduce the variable) 
 		
 		#-get start date of first forcing file in forcing directory
 		syF = config.getint('TIMING', 'startyear_F')
@@ -217,7 +218,6 @@ class sphy(pcrm.DynamicModel):
 										'MaxSnowWatStore_GLAC', 'OldTotalSnowStore_GLAC', 'TotalSnowStore_GLAC',\
 										'SnowR_GLAC', 'GlacMelt', 'GlacR', 'GlacPerc'])
 			self.GlacTable = pd.concat([self.GlacTable, cols], axis=1).fillna(0)
-			
 			#-sort on MOD_ID column
 			self.GlacTable.sort_values(by='MOD_ID', inplace=True)
 			#-Read the glacier maps
@@ -243,7 +243,11 @@ class sphy(pcrm.DynamicModel):
 				except:
 					setattr(self, i, config.getfloat('GLACIER',i))
 			#-Lapse rate for temperature
-			self.TLapse = config.getfloat('CLIMATE', 'TLapse')
+			self.TLapse_table = pd.read_csv(self.inpath + config.get('CLIMATE','TLapse'), header=None, index_col=0, sep=' ', skipinitialspace =True)
+			
+			#self.TLapse = config.getfloat('CLIMATE', 'TLapse')
+			#-Map with glacier IDs
+			self.GlacID = pcr.readmap(self.inpath + config.get('GLACIER','GlacID'))
 			#-Check if glacier retreat should be calculated
 			self.GlacRetreat = config.getint('GLACIER','GlacRetreat')
 			if self.GlacRetreat == 1:
@@ -491,6 +495,31 @@ class sphy(pcrm.DynamicModel):
 			# 1-D Masks for debris and clean ice
 			self.CImask = self.GlacTable['DEBRIS'] == 0
 			self.DBmask = pcr.numpy.invert(self.CImask)
+			#-If dynamic glacier retreat is on, then make spatial maps of initial glacier area, volume, and depth
+			if self.GlacRetreat == 1:
+				#-Calculate the  area and depth per model ID
+				GlacTable_MODid = self.GlacTable.loc[:,['FRAC_GLAC', 'ICE_DEPTH']]
+				GlacTable_MODid['ICE_DEPTH'] = GlacTable_MODid['ICE_DEPTH'] * GlacTable_MODid['FRAC_GLAC']
+				GlacTable_MODid['AREA'] = GlacTable_MODid['FRAC_GLAC'] * self.cellArea
+				GlacTable_MODid = GlacTable_MODid.groupby(GlacTable_MODid.index).sum()
+				#-Report pcraster map of glacier area
+				glacArea = pcr.numpy.zeros(self.ModelID_1d.shape)
+				glacArea[self.GlacierKeys] = GlacTable_MODid['AREA']
+				glacArea = glacArea.reshape(self.ModelID.shape)
+				glacArea = pcr.numpy2pcr(Scalar, glacArea, self.MV)
+				glacArea = pcr.ifthen(self.clone, glacArea)  #-only use values where clone is True
+				pcr.report(glacArea, self.outpath + 'GlacArea_' + self.curdate.strftime('%Y%m%d') + '.map')
+				#-Report pcraster map of glacier depth
+				iceDepth = pcr.numpy.zeros(self.ModelID_1d.shape)
+				iceDepth[self.GlacierKeys] = GlacTable_MODid['ICE_DEPTH']
+				iceDepth = iceDepth.reshape(self.ModelID.shape)
+				iceDepth = pcr.numpy2pcr(Scalar, iceDepth, self.MV)
+				iceDepth = pcr.ifthen(self.clone, iceDepth)  #-only use values where clone is True
+				pcr.report(iceDepth, self.outpath + 'iceDepth_' + self.curdate.strftime('%Y%m%d') + '.map')
+				#-Report pcraster map of glacier volume
+				pcr.report(iceDepth * glacArea, self.outpath + 'vIce_' + self.curdate.strftime('%Y%m%d') + '.map')
+				#-Delete variables that are not needed
+				glacArea = None; del glacArea; iceDepth = None; del iceDepth; GlacTable_MODid = None; del GlacTable_MODid
 		else:
 			self.GlacFrac = 0
 			
@@ -581,18 +610,30 @@ class sphy(pcrm.DynamicModel):
 				self.QGLACSubBasinTSS = pcrm.TimeoutputTimeseries("QGLACSubBasinTSS", self, self.Locations, noHeader=False)
 				self.QBASFSubBasinTSS = pcrm.TimeoutputTimeseries("QBASFSubBasinTSS", self, self.Locations, noHeader=False)
 				self.QTOTSubBasinTSS = pcrm.TimeoutputTimeseries("QTOTSubBasinTSS", self, self.Locations, noHeader=False)
+			
+			
+			
+			#????????????????????????????????????
+			
 			#-Initialize reporting per glacier ID
 			self.GlacID_flag = config.getint('REPORTING', 'GlacID_flag')
 			if self.GlacID_flag:
-				self.GlacID_month = config.getint('REPORTING', 'GlacID_month') #-flag to aggregate to monthly output at end of model simulation 
 				self.GlacVars = config.get('REPORTING', 'GlacID_report').split(',')  #-get the variables to report
 				glacid = sorted(self.GlacTable['GLAC_ID'].unique())  #-get the unique glacier ids
 				drange = pd.date_range(self.startdate, self.enddate, freq='D')
 				for p in self.GlacVars: #-make panda dataframes for each variable to report
 					setattr(self, p + '_Table', pd.DataFrame(index = drange, columns=glacid,dtype=float))  #-create table for each variable to report
 				if self.GlacRetreat == 1: #-then also report average ice depth per glacier and total glacier fraction
-					self.iceDepth_Table = pd.DataFrame(index = drange, columns=glacid,dtype=float)
-					self.Frac_Table = pd.DataFrame(index = drange, columns=glacid,dtype=float)
+					#----> Option would be to incldue ICE_DEPTH in the cfg in the list of to report variables. Then this part can be skipped because it's then part of the self.GlacVars
+					self.iceDepth_Table = pd.DataFrame(index = drange, columns=glacid, dtype=float)
+					self.Frac_Table = pd.DataFrame(index = drange, columns=glacid, dtype=float)
+					
+					
+					
+			#????????????????????????????????????					
+					
+					
+					
 		elif self.SnowFLAG == 1:
 			if self.GroundFLAG == 1:		
 				pars = ['wbal','GWL','TotPrec','TotPrecE','TotInt','TotRain','TotETpot','TotETact','TotSnow','TotSnowMelt','TotRootR','TotRootD','TotRootP',\
@@ -743,6 +784,8 @@ class sphy(pcrm.DynamicModel):
 			ETref = self.Hargreaves.Hargreaves(pcr, self.Hargreaves.extrarad(self, pcr), Temp, TempMax, TempMin)
 		else:
 			ETref = pcr.readmap(pcrm.generateNameT(self.ETref, self.counter))
+		########################################
+
 
 		#-Interception and effective precipitation
 		#-Update canopy storage
@@ -793,7 +836,10 @@ class sphy(pcrm.DynamicModel):
 			self.GlacTable.update(T)
 			T = None; T_1d = None; del T, T_1d
 			#-lapse temperature for glaciers
-			self.GlacTable['GLAC_T'] = self.GlacTable['MOD_T'] - (self.GlacTable['MOD_H'] - self.GlacTable['GLAC_H']) * self.TLapse
+			#self.GlacTable['GLAC_T'] = self.GlacTable['MOD_T'] - (self.GlacTable['MOD_H'] - self.GlacTable['GLAC_H']) * self.TLapse
+			Tlapse = float(self.TLapse_table.loc[self.curdate.month])
+			print Tlapse
+			self.GlacTable['GLAC_T'] = self.GlacTable['MOD_T'] - (self.GlacTable['MOD_H'] - self.GlacTable['GLAC_H']) * Tlapse
 			#-1 dim array of Precip map
 			P_1d = pcr.pcr2numpy(Precip, self.MV).flatten()  	
 			P = pd.DataFrame(data={'Prec_GLAC': P_1d[self.GlacierKeys]}, index=self.ModelID_1d[self.GlacierKeys])
@@ -1272,22 +1318,28 @@ class sphy(pcrm.DynamicModel):
 				#-Reporting for each glacier ID
 				if self.GlacID_flag:
 					GlacTable_GLACid = self.GlacTable.loc[:, self.GlacVars]
+					
+					##????????????
 					if self.GlacRetreat == 1: #-if glacier retreat is calculated, then also monitor ice depth balance ( + snowstore) and area
-						GlacTable_GLACid['ICE_DEPTH'] = self.GlacTable['ICE_DEPTH'] + (self.GlacTable['TotalSnowStore_GLAC'] / 1000)
+						#----> Option would be to incldue ICE_DEPTH in the cfg in the list of to report variables. Then this part can be skipped because it's then part of the self.GlacVars
+						GlacTable_GLACid['ICE_DEPTH'] = self.GlacTable['ICE_DEPTH']
+						
+					###????????????
 						
 					#-Muliply with fraction, summarize, and divide by total fraction to get glacier ID average 
 					GlacTable_GLACid = GlacTable_GLACid.multiply(self.GlacTable['FRAC_GLAC'], axis='index')  #-Multiply with fraction
 					GlacTable_GLACid['GLAC_ID'] = self.GlacTable['GLAC_ID']; GlacTable_GLACid['FRAC_GLAC'] = self.GlacTable['FRAC_GLAC']  #-Add GLAC_ID column and FRAC_GLAC column
-					GlacTable_GLACid = GlacTable_GLACid.groupby('GLAC_ID').sum() #-Summarize by Glacier ID and divide by total fraction for glacier weighted average
+					GlacTable_GLACid = GlacTable_GLACid.groupby('GLAC_ID').sum() #-Summarize by Glacier ID
 					FracSum = GlacTable_GLACid['FRAC_GLAC'] #-Get summed glacier fraction					
-					GlacTable_GLACid = GlacTable_GLACid.div(FracSum, axis='index') #-Area weighted average (frac==1)
+					GlacTable_GLACid = GlacTable_GLACid.div(FracSum, axis='index') #-Divide by total fraction for glacier weighted average (frac==1)
 					GlacTable_GLACid['FRAC_GLAC'] = FracSum; FracSum = None; del FracSum  
 					GlacTable_GLACid = GlacTable_GLACid.transpose()  #-Transpose the glacier id table (ID as columns and vars as index)
 					GlacTable_GLACid.fillna(0., inplace=True);
 					#-Fill Glacier variable tables for reporting
 					for v in self.GlacVars:
 						vv = getattr(self, v + '_Table'); vv.loc[self.curdate,:] = GlacTable_GLACid.loc[v,:]
-					if self.GlacRetreat == 1: #-if glacier retreat is calculated, the updated the icedepth table
+					if self.GlacRetreat == 1: #-if glacier retreat is calculated, the updated the icedepth table (total fraction per glacier, and glacier weighted ice depth)
+						#----> Option would be to incldue ICE_DEPTH and FRAC_GLAC in the cfg in the list of to report variables
 						self.iceDepth_Table.loc[self.curdate,:] = GlacTable_GLACid.loc['ICE_DEPTH',:]
 						self.Frac_Table.loc[self.curdate,:] = GlacTable_GLACid.loc['FRAC_GLAC',:]
 					v = None; vv = None; del v, vv; GlacTable_GLACid = None; del GlacTable_GLACid
@@ -1297,21 +1349,10 @@ class sphy(pcrm.DynamicModel):
 						if self.GlacRetreat == 1:
 							self.iceDepth_Table.to_csv(self.outpath + 'IceDepth.csv')
 							self.Frac_Table.to_csv(self.outpath + 'Frac.csv')
-						if self.GlacID_month: #-Aggregate by month
-							for v in self.GlacVars:
-								if v in ['SnowStore_GLAC', 'SnowWatStore_GLAC' , 'TotalSnowStore_GLAC']:
-									mvar = eval('self.' + v + '_Table.groupby([self.' + v + '_Table.index.year, self.' + v + '_Table.index.month]).last()')
-								else:
-									mvar = eval('self.' + v + '_Table.groupby([self.' + v + '_Table.index.year, self.' + v + '_Table.index.month]).sum()')
-								eval('mvar.to_csv("'  + self.outpath + v + '_monthly.csv")')
-							if self.GlacRetreat == 1:
-								mvar = self.iceDepth_Table.groupby([self.iceDepth_Table.index.year, self.iceDepth_Table.index.month]).last()
-								mvar.to_csv(self.outpath + 'IceDepth_monthly.csv')
-								mvar = self.Frac_Table.groupby([self.Frac_Table.index.year, self.Frac_Table.index.month]).last()
-								mvar.to_csv(self.outpath + 'Frac_monthly.csv')
 
 				#-Check if glacier retreat should be calculated
 				if self.GlacRetreat == 1 and self.curdate.month == self.GlacUpdate['month'] and self.curdate.day == self.GlacUpdate['day']:
+					self.dateAfterUpdate = self.curdate + self.datetime.timedelta(days=1)
 					#-Create a table with fields used for updating the glacier fraction at defined update date
 					GlacFracTable = self.GlacTable.loc[:,['U_ID', 'GLAC_ID','FRAC_GLAC','ICE_DEPTH']]
 					#-Set the initial ice volumes and snow store
@@ -1390,7 +1431,7 @@ class sphy(pcrm.DynamicModel):
 					GlacFracTable['FRAC_GLAC_new'] = GlacFracTable['FRAC_GLAC']
 					GlacFracTable.loc[noIceMask,'FRAC_GLAC_new'] = 0.
 					noIceMask = None; del noIceMask
-					
+
 					#-Update the glactable
 					self.GlacTable['FRAC_GLAC'] = GlacFracTable['FRAC_GLAC_new']
 					self.GlacTable['ICE_DEPTH'] = GlacFracTable['ICE_DEPTH_new']
@@ -1402,14 +1443,17 @@ class sphy(pcrm.DynamicModel):
 					#-Remove the GlacFracTable
 					GlacFracTable = None; del GlacFracTable
 					
+				#-Write spatial maps of glacier fraction, ice depth, and average ice depth per glacier on day after update day
+				if self.GlacRetreat == 1 and self.curdate == self.dateAfterUpdate:					
 					#-Calculate average model ID ice depth and total model glacier fraction
 					GlacTable_MODid = self.GlacTable.loc[:,['FRAC_GLAC', 'ICE_DEPTH']]
-					GlacTable_MODid['ICE_DEPTH'] = GlacTable_MODid['FRAC_GLAC'] * GlacTable_MODid['ICE_DEPTH']
+					GlacTable_MODid['ICE_DEPTH'] = GlacTable_MODid['ICE_DEPTH'] * GlacTable_MODid['FRAC_GLAC']
+					GlacTable_MODid['AREA'] = GlacTable_MODid['FRAC_GLAC'] * self.cellArea
 					GlacTable_MODid = GlacTable_MODid.groupby(GlacTable_MODid.index).sum()
-					GlacTable_MODid['ICE_DEPTH'] = GlacTable_MODid['ICE_DEPTH'] / GlacTable_MODid['FRAC_GLAC']
-					GlacTable_MODid.fillna(0., inplace=True)
+
+					#GlacTable_MODid.fillna(0., inplace=True)
 					
-					#-Write new glacier fraction map
+					#-Report updated glacier fraction map
 					self.GlacFrac = pcr.numpy.zeros(self.ModelID_1d.shape)
 					self.GlacFrac[self.GlacierKeys] = GlacTable_MODid['FRAC_GLAC']
 					self.GlacFrac = self.GlacFrac.reshape(self.ModelID.shape)
@@ -1417,15 +1461,24 @@ class sphy(pcrm.DynamicModel):
 					self.GlacFrac = pcr.ifthen(self.clone, self.GlacFrac)  #-only use values where clone is True
 					pcr.report(self.GlacFrac, self.outpath + 'GlacFrac_' + self.curdate.strftime('%Y%m%d') + '.map')
 					
-					#-Write new ice depth map
-					icedepth = pcr.numpy.zeros(self.ModelID_1d.shape)
-					icedepth[self.GlacierKeys] = GlacTable_MODid['ICE_DEPTH']
-					icedepth = icedepth.reshape(self.ModelID.shape)
-					icedepth = pcr.numpy2pcr(Scalar, icedepth, self.MV)
-					icedepth = pcr.ifthen(self.clone, icedepth)  #-only use values where clone is True
-					pcr.report(icedepth, self.outpath + 'IceDepth_' + self.curdate.strftime('%Y%m%d') + '.map')
-					#-Remove variables that are not needed
-					icedepth = None; del icedepth; GlacTable_MODid = None; del GlacTable_MODid
+					#-Report pcraster map of glacier area
+					glacArea = pcr.numpy.zeros(self.ModelID_1d.shape)
+					glacArea[self.GlacierKeys] = GlacTable_MODid['AREA']
+					glacArea = glacArea.reshape(self.ModelID.shape)
+					glacArea = pcr.numpy2pcr(Scalar, glacArea, self.MV)
+					glacArea = pcr.ifthen(self.clone, glacArea)  #-only use values where clone is True
+					pcr.report(glacArea, self.outpath + 'GlacArea_' + self.curdate.strftime('%Y%m%d') + '.map')
+					#-Report pcraster map of glacier depth
+					iceDepth = pcr.numpy.zeros(self.ModelID_1d.shape)
+					iceDepth[self.GlacierKeys] = GlacTable_MODid['ICE_DEPTH']
+					iceDepth = iceDepth.reshape(self.ModelID.shape)
+					iceDepth = pcr.numpy2pcr(Scalar, iceDepth, self.MV)
+					iceDepth = pcr.ifthen(self.clone, iceDepth)  #-only use values where clone is True
+					pcr.report(iceDepth, self.outpath + 'iceDepth_' + self.curdate.strftime('%Y%m%d') + '.map')
+					#-Report pcraster map of glacier volume
+					pcr.report(iceDepth * glacArea, self.outpath + 'vIce_' + self.curdate.strftime('%Y%m%d') + '.map')
+					#-Delete variables that are not needed
+					glacArea = None; del glacArea; iceDepth = None; del iceDepth; GlacTable_MODid = None; del GlacTable_MODid
 
 		#-update current date				
 		self.curdate = self.curdate + self.datetime.timedelta(days=1)
