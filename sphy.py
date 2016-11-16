@@ -12,7 +12,6 @@ import pandas as pd
 import pcraster as pcr
 import pcraster.framework as pcrm
 from pcraster._pcraster import Scalar
-#from time import strftime
 
 tic = time.clock()
 
@@ -608,11 +607,6 @@ class sphy(pcrm.DynamicModel):
 				self.QGLACSubBasinTSS = pcrm.TimeoutputTimeseries("QGLACSubBasinTSS", self, self.Locations, noHeader=False)
 				self.QBASFSubBasinTSS = pcrm.TimeoutputTimeseries("QBASFSubBasinTSS", self, self.Locations, noHeader=False)
 				self.QTOTSubBasinTSS = pcrm.TimeoutputTimeseries("QTOTSubBasinTSS", self, self.Locations, noHeader=False)
-			
-			
-			
-			#????????????????????????????????????
-			
 			#-Initialize reporting per glacier ID
 			self.GlacID_flag = config.getint('REPORTING', 'GlacID_flag')
 			if self.GlacID_flag:
@@ -621,17 +615,6 @@ class sphy(pcrm.DynamicModel):
 				drange = pd.date_range(self.startdate, self.enddate, freq='D')
 				for p in self.GlacVars: #-make panda dataframes for each variable to report
 					setattr(self, p + '_Table', pd.DataFrame(index = drange, columns=glacid,dtype=float))  #-create table for each variable to report
-# 				if self.GlacRetreat == 1: #-then also report average ice depth per glacier and total glacier fraction
-# 					#----> Option would be to incldue ICE_DEPTH in the cfg in the list of to report variables. Then this part can be skipped because it's then part of the self.GlacVars
-# 					self.iceDepth_Table = pd.DataFrame(index = drange, columns=glacid, dtype=float)
-# 					self.Frac_Table = pd.DataFrame(index = drange, columns=glacid, dtype=float)
-					
-					
-					
-			#????????????????????????????????????					
-					
-					
-					
 		elif self.SnowFLAG == 1:
 			if self.GroundFLAG == 1:		
 				pars = ['wbal','GWL','TotPrec','TotPrecE','TotInt','TotRain','TotETpot','TotETact','TotSnow','TotSnowMelt','TotRootR','TotRootD','TotRootP',\
@@ -782,8 +765,6 @@ class sphy(pcrm.DynamicModel):
 			ETref = self.Hargreaves.Hargreaves(pcr, self.Hargreaves.extrarad(self, pcr), Temp, TempMax, TempMin)
 		else:
 			ETref = pcr.readmap(pcrm.generateNameT(self.ETref, self.counter))
-		########################################
-
 
 		#-Interception and effective precipitation
 		#-Update canopy storage
@@ -1314,12 +1295,12 @@ class sphy(pcrm.DynamicModel):
 				if self.GlacID_flag:
 					GlacTable_GLACid = self.GlacTable.loc[:, self.GlacVars]
 					
-					##????????????
-					if self.GlacRetreat == 1: #-if glacier retreat is calculated, then also monitor ice depth balance ( + snowstore) and area
-						#----> Option would be to incldue ICE_DEPTH in the cfg in the list of to report variables. Then this part can be skipped because it's then part of the self.GlacVars
-						GlacTable_GLACid['ICE_DEPTH'] = self.GlacTable['ICE_DEPTH']
-						
-					###????????????
+# 					##????????????
+# 					if self.GlacRetreat == 1: #-if glacier retreat is calculated, then also monitor ice depth balance ( + snowstore) and area
+# 						#----> Option would be to incldue ICE_DEPTH in the cfg in the list of to report variables. Then this part can be skipped because it's then part of the self.GlacVars
+# 						GlacTable_GLACid['ICE_DEPTH'] = self.GlacTable['ICE_DEPTH']
+# 						
+# 					###????????????
 						
 					#-Muliply with fraction, summarize, and divide by total fraction to get glacier ID average 
 					GlacTable_GLACid = GlacTable_GLACid.multiply(self.GlacTable['FRAC_GLAC'], axis='index')  #-Multiply with fraction
@@ -1333,17 +1314,10 @@ class sphy(pcrm.DynamicModel):
 					#-Fill Glacier variable tables for reporting
 					for v in self.GlacVars:
 						vv = getattr(self, v + '_Table'); vv.loc[self.curdate,:] = GlacTable_GLACid.loc[v,:]
-# 					if self.GlacRetreat == 1: #-if glacier retreat is calculated, the updated the icedepth table (total fraction per glacier, and glacier weighted ice depth)
-# 						#----> Option would be to incldue ICE_DEPTH and FRAC_GLAC in the cfg in the list of to report variables
-# 						self.iceDepth_Table.loc[self.curdate,:] = GlacTable_GLACid.loc['ICE_DEPTH',:]
-# 						self.Frac_Table.loc[self.curdate,:] = GlacTable_GLACid.loc['FRAC_GLAC',:]
 					v = None; vv = None; del v, vv; GlacTable_GLACid = None; del GlacTable_GLACid
 					if self.curdate == self.enddate: #-do the reporting at the final model time-step
 						for v in self.GlacVars:
 							eval('self.' + v + '_Table.to_csv("'  + self.outpath + v + '.csv")')
-# 						if self.GlacRetreat == 1:
-# 							self.iceDepth_Table.to_csv(self.outpath + 'IceDepth.csv')
-# 							self.Frac_Table.to_csv(self.outpath + 'Frac.csv')
 
 				#-Check if glacier retreat should be calculated
 				if self.GlacRetreat == 1 and self.curdate.month == self.GlacUpdate['month'] and self.curdate.day == self.GlacUpdate['day']:
