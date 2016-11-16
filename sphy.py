@@ -621,10 +621,10 @@ class sphy(pcrm.DynamicModel):
 				drange = pd.date_range(self.startdate, self.enddate, freq='D')
 				for p in self.GlacVars: #-make panda dataframes for each variable to report
 					setattr(self, p + '_Table', pd.DataFrame(index = drange, columns=glacid,dtype=float))  #-create table for each variable to report
-				if self.GlacRetreat == 1: #-then also report average ice depth per glacier and total glacier fraction
-					#----> Option would be to incldue ICE_DEPTH in the cfg in the list of to report variables. Then this part can be skipped because it's then part of the self.GlacVars
-					self.iceDepth_Table = pd.DataFrame(index = drange, columns=glacid, dtype=float)
-					self.Frac_Table = pd.DataFrame(index = drange, columns=glacid, dtype=float)
+# 				if self.GlacRetreat == 1: #-then also report average ice depth per glacier and total glacier fraction
+# 					#----> Option would be to incldue ICE_DEPTH in the cfg in the list of to report variables. Then this part can be skipped because it's then part of the self.GlacVars
+# 					self.iceDepth_Table = pd.DataFrame(index = drange, columns=glacid, dtype=float)
+# 					self.Frac_Table = pd.DataFrame(index = drange, columns=glacid, dtype=float)
 					
 					
 					
@@ -1333,17 +1333,17 @@ class sphy(pcrm.DynamicModel):
 					#-Fill Glacier variable tables for reporting
 					for v in self.GlacVars:
 						vv = getattr(self, v + '_Table'); vv.loc[self.curdate,:] = GlacTable_GLACid.loc[v,:]
-					if self.GlacRetreat == 1: #-if glacier retreat is calculated, the updated the icedepth table (total fraction per glacier, and glacier weighted ice depth)
-						#----> Option would be to incldue ICE_DEPTH and FRAC_GLAC in the cfg in the list of to report variables
-						self.iceDepth_Table.loc[self.curdate,:] = GlacTable_GLACid.loc['ICE_DEPTH',:]
-						self.Frac_Table.loc[self.curdate,:] = GlacTable_GLACid.loc['FRAC_GLAC',:]
+# 					if self.GlacRetreat == 1: #-if glacier retreat is calculated, the updated the icedepth table (total fraction per glacier, and glacier weighted ice depth)
+# 						#----> Option would be to incldue ICE_DEPTH and FRAC_GLAC in the cfg in the list of to report variables
+# 						self.iceDepth_Table.loc[self.curdate,:] = GlacTable_GLACid.loc['ICE_DEPTH',:]
+# 						self.Frac_Table.loc[self.curdate,:] = GlacTable_GLACid.loc['FRAC_GLAC',:]
 					v = None; vv = None; del v, vv; GlacTable_GLACid = None; del GlacTable_GLACid
 					if self.curdate == self.enddate: #-do the reporting at the final model time-step
 						for v in self.GlacVars:
 							eval('self.' + v + '_Table.to_csv("'  + self.outpath + v + '.csv")')
-						if self.GlacRetreat == 1:
-							self.iceDepth_Table.to_csv(self.outpath + 'IceDepth.csv')
-							self.Frac_Table.to_csv(self.outpath + 'Frac.csv')
+# 						if self.GlacRetreat == 1:
+# 							self.iceDepth_Table.to_csv(self.outpath + 'IceDepth.csv')
+# 							self.Frac_Table.to_csv(self.outpath + 'Frac.csv')
 
 				#-Check if glacier retreat should be calculated
 				if self.GlacRetreat == 1 and self.curdate.month == self.GlacUpdate['month'] and self.curdate.day == self.GlacUpdate['day']:
@@ -1438,8 +1438,14 @@ class sphy(pcrm.DynamicModel):
 					#-Remove the GlacFracTable
 					GlacFracTable = None; del GlacFracTable
 					
-				#-Write spatial maps of glacier fraction, ice depth, and average ice depth per glacier on day after update day
-				if self.GlacRetreat == 1 and self.curdate == self.dateAfterUpdate:					
+				#-Write glacier table, spatial maps of glacier fraction, ice depth, and average ice depth per glacier on day after update day
+				if self.GlacRetreat == 1 and self.curdate == self.dateAfterUpdate:
+					#-Write glac table to csv (can be used as initial setting for new run)
+					glac_csv = self.GlacTable.loc[:,['U_ID','GLAC_ID','MOD_H','GLAC_H','DEBRIS','FRAC_GLAC','ICE_DEPTH']]
+					glac_csv.insert(1, 'MOD_ID', self.GlacTable.index)
+					glac_csv.to_csv(self.outpath + 'glacTable_' + self.curdate.strftime('%Y%m%d') + '.csv', index=False)
+					glac_csv = None; del glac_csv
+										
 					#-Calculate average model ID ice depth and total model glacier fraction
 					GlacTable_MODid = self.GlacTable.loc[:,['FRAC_GLAC', 'ICE_DEPTH']]
 					GlacTable_MODid['ICE_DEPTH'] = GlacTable_MODid['ICE_DEPTH'] * GlacTable_MODid['FRAC_GLAC']
