@@ -16,7 +16,7 @@ More information about the SPHY model can be found on the <a href="http://www.sp
 
 <li><a href="https://github.com/FutureWater/SPHY/blob/SPHY2.0/SPHY_case_studies.pdf" target="_blank">Terink, W., A.F. Lutz, G.W.H. Simons, W.W. Immerzeel. 2015. SPHY: Spatial Processes in HYdrology. Case-studies for training. FutureWater Report 144.</a></li>
 
-<li><a href="https://github.com/FutureWater/SPHY/blob/SPHY2.0/SPHY_GUIs" target="_blank">Terink, W., A.F. Lutz, W.W. Immerzeel. 2015. SPHY: Spatial Processes in HYdrology. Graphical User-Interfaces (GUIs). FutureWater Report 143.</a></li>
+<li><a href="https://github.com/FutureWater/SPHY/blob/SPHY2.0/SPHY_GUIs.pdf" target="_blank">Terink, W., A.F. Lutz, W.W. Immerzeel. 2015. SPHY: Spatial Processes in HYdrology. Graphical User-Interfaces (GUIs). FutureWater Report 143.</a></li>
 
 </ul>
 
