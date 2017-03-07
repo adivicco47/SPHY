@@ -7,6 +7,9 @@ The Spatial Processes in Hydrology (SPHY) model is a hydrological modeling tool 
 
 More information about the SPHY model can be found on the <a href="http://www.sphy-model.org" target="_blank">SPHY model website</a>.
 
+<b>SPHY model user group</b></br>
+A user group for the SPHY model is available in <a href="https://groups.google.com/forum/#!forum/sphy-model-user" target="_blank">Google Groups</a>. You can use this group to post Questions and Answers related to the source code, available plugins, input and output formats, calibration, applications, and suggestions for improvements.
+
 <b>Documentation</b>
 <ul>
 
