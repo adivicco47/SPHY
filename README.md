@@ -11,6 +11,8 @@ More information about the SPHY model can be found on the <a href="http://www.sp
 RESERVOIR module is split into two modules, being a LAKE and a RESERVOIR module. The advantage is that these modules can run independently from each other.
 The new RESERVOIR module allows the implementation of a simple or advanced reservoir, whereas the advanced reservoir allows for operational reservoir management.
 
+<b>SPHY model user group</b></br>
+A user group for the SPHY model is available in <a href="https://groups.google.com/forum/#!forum/sphy-model-user" target="_blank">Google Groups</a>. You can use this group to post Questions and Answers related to the source code, available plugins, input and output formats, calibration, applications, and suggestions for improvements.
 
 <b>Documentation</b>
 <ul>
