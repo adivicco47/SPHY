@@ -413,8 +413,7 @@ class sphy(pcrm.DynamicModel):
 				self.SubWater = config.getfloat('SOIL_INIT','SubWater')
 			except:
 				self.SubWater = pcr.readmap(self.inpath + config.get('SOIL_INIT','SubWater'))
-		#-initial water storage in rootzone + subsoil
-		self.SoilWater = self.RootWater + self.SubWater
+
 		#-initial capillary rise
 		try:
 			self.CapRise = config.getfloat('SOIL_INIT','CapRise')
@@ -539,7 +538,8 @@ class sphy(pcrm.DynamicModel):
 				#-Report pcraster map of glacier volume
 				pcr.report(iceDepth * glacArea, self.outpath + 'vIce_' + self.curdate.strftime('%Y%m%d') + '.map')
 				#-Delete variables that are not needed
-				glacArea = None; del glacArea; iceDepth = None; del iceDepth; GlacTable_MODid = None; del GlacTable_MODid
+				glacArea = None; del glacArea; #iceDepth = None; del iceDepth; 
+				GlacTable_MODid = None; del GlacTable_MODid
 		else:
 			self.GlacFrac = 0
 			
@@ -766,6 +766,17 @@ class sphy(pcrm.DynamicModel):
 				self.ResBaseInTSS = pcrm.TimeoutputTimeseries("ResBaseInTSS", self, self.ResID, noHeader=True)
 				self.ResBaseOutTSS = pcrm.TimeoutputTimeseries("ResBaseOutTSS", self, self.ResID, noHeader=True)
 				self.ResBaseStorTSS = pcrm.TimeoutputTimeseries("ResBaseStorTSS", self, self.ResID, noHeader=True)
+				
+		#-implemented on 2017-06-26 for calculating water balance
+		self.oldRootWater = self.RootWater
+		self.oldSubWater = self.SubWater
+		if self.GroundFLAG:
+			self.oldGw = self.Gw
+		if self.GlacFLAG and self.GlacRetreat==1:
+			self.oldIceDepth = iceDepth * 1000 # in mm
+		self.wbalTSS = pcrm.TimeoutputTimeseries("wbalTSS", self, self.Locations, noHeader=True)
+		self.wbalTotTSS = pcrm.TimeoutputTimeseries("wbalTotTSS", self, self.Locations, noHeader=True)
+		self.waterbalanceTot = pcr.scalar(0.)
 
 	def dynamic(self):
 		self.counter+=1
@@ -955,7 +966,8 @@ class sphy(pcrm.DynamicModel):
 			#-Report glacier melt
 			self.reporting.reporting(self, pcr, 'TotGlacMelt', GlacMelt)
 			if self.mm_rep_FLAG == 1 and (self.RoutFLAG == 1 or self.ResFLAG == 1 or self.LakeFLAG == 1):
-				self.GMeltSubBasinTSS.sample(pcr.catchmenttotal(GlacMelt * self.GlacFrac, self.FlowDir) / pcr.catchmenttotal(1, self.FlowDir))
+				#self.GMeltSubBasinTSS.sample(pcr.catchmenttotal(GlacMelt * self.GlacFrac, self.FlowDir) / pcr.catchmenttotal(1, self.FlowDir))
+				self.GMeltSubBasinTSS.sample(pcr.catchmenttotal(GlacMelt, self.FlowDir) / pcr.catchmenttotal(1, self.FlowDir))
 			#-Glacier runoff
 			GlacR = pcr.numpy.zeros(self.ModelID_1d.shape)
 			GlacR[self.GlacierKeys] = GlacTable_MODid['GlacR']
@@ -982,17 +994,17 @@ class sphy(pcrm.DynamicModel):
 			GlacMelt = 0
 			GlacPerc = 0
 
-		# Snow and rain for non-glacier part of cell
+		# Calculate snow and rain for non-glacier part of cell
 		if self.SnowFLAG == 1:
 			#-Snow and rain differentiation
 			Snow = pcr.ifthenelse(Temp >= self.Tcrit, 0, Precip)
 			Rain = pcr.ifthenelse(Temp < self.Tcrit, 0, Precip)
-			#-Report Snow
+			#-Report Snow for entire cell (snow+glacier fraction)
 			self.reporting.reporting(self, pcr, 'TotSnow', Snow * (1-self.GlacFrac) + Snow_GLAC)
 			#-Snow melt
 			PotSnowMelt = self.snow.PotSnowMelt(pcr, Temp, self.DDFS)
 			ActSnowMelt = self.snow.ActSnowMelt(pcr, self.SnowStore, PotSnowMelt)
-			#-Report snow melt
+			#-Report snow melt for entire cell (snow+glacier fraction)
 			self.reporting.reporting(self, pcr, 'TotSnowMelt', ActSnowMelt * (1-self.GlacFrac) + ActSnowMelt_GLAC)
 			#-Update snow store
 			self.SnowStore = self.snow.SnowStoreUpdate(pcr, self.SnowStore, Snow, ActSnowMelt, Temp, self.SnowWatStore)
@@ -1003,9 +1015,9 @@ class sphy(pcrm.DynamicModel):
 			self.SnowWatStore = self.snow.SnowWatStorage(pcr, Temp, MaxSnowWatStore, self.SnowWatStore, ActSnowMelt, Rain)
 			#-Changes in total water storage in snow (SnowStore and SnowWatStore)
 			OldTotalSnowStore = self.TotalSnowStore
-			self.TotalSnowStore = self.snow.TotSnowStorage(self.SnowStore, self.SnowWatStore, SnowFrac, RainFrac) + TotalSnowStore_GLAC
+			self.TotalSnowStore = self.snow.TotSnowStorage(self.SnowStore, self.SnowWatStore, SnowFrac, RainFrac) + TotalSnowStore_GLAC  # for entire cell
 			#-Snow runoff
-			SnowR = self.snow.SnowR(pcr, self.SnowWatStore, MaxSnowWatStore, ActSnowMelt, Rain, OldSnowWatStore, SnowFrac) + SnowR_GLAC
+			SnowR = self.snow.SnowR(pcr, self.SnowWatStore, MaxSnowWatStore, ActSnowMelt, Rain, OldSnowWatStore, SnowFrac) + SnowR_GLAC  # for entire cell
 			#-Report Snow runoff
 			self.reporting.reporting(self, pcr, 'TotSnowR', SnowR)
 		else:
@@ -1014,7 +1026,7 @@ class sphy(pcrm.DynamicModel):
 			OldTotalSnowStore = 0
 			self.TotalSnowStore = 0
 		#-Report Rain
-		self.reporting.reporting(self, pcr, 'TotRain', Rain * (1-self.GlacFrac) + Rain_GLAC)
+		self.reporting.reporting(self, pcr, 'TotRain', Rain * (1-self.GlacFrac) + Rain_GLAC)  # for entire cell
 
 		#-Potential evapotranspiration
 		ETpot = self.ET.ETpot(ETref, self.Kc) 
@@ -1082,10 +1094,6 @@ class sphy(pcrm.DynamicModel):
 			#-Update sub soil water content
 			self.SubWater = self.SubWater - self.SubDrain
 			
-		#-Changes in soil water storage
-		OldSoilWater = self.SoilWater
-		self.SoilWater = (self.RootWater + self.SubWater) * (1-self.GlacFrac)
-
 		#-Rootzone runoff
 		RootR = RootRunoff * RainFrac
 		#-Report rootzone runoff
@@ -1101,7 +1109,6 @@ class sphy(pcrm.DynamicModel):
 		
 		#-Groundwater calculations
 		if self.GroundFLAG == 1:
-			GwOld = self.Gw
 			#-Groundwater recharge
 			self.GwRecharge = self.groundwater.GroundWaterRecharge(pcr,	self.deltaGw, self.GwRecharge, ActSubPerc, GlacPerc)
 			#-Report groundwater recharge
@@ -1131,14 +1138,6 @@ class sphy(pcrm.DynamicModel):
 		#-Report Total runoff
 		self.reporting.reporting(self, pcr, 'TotR', self.BaseR + RainR + SnowR + GlacR)
 
-		#-Water balance
-		if self.GroundFLAG == 1:
-			waterbalance = Precip + GlacMelt - ActETact - GlacR - SnowR - RainR -\
-				self.BaseR - (self.SoilWater-OldSoilWater) - (self.TotalSnowStore-OldTotalSnowStore) - (self.Gw-GwOld)
-		elif self.GroundFLAG == 0:
-			waterbalance = Precip - ActETact - self.SeePage - SnowR - RainR - self.BaseR - (self.SoilWater-OldSoilWater) - (self.TotalSnowStore-OldTotalSnowStore)
-		self.reporting.reporting(self, pcr, 'wbal', waterbalance)
-		
 		#-Routing for lake and/or reservoir modules
 		if self.LakeFLAG == 1 or self.ResFLAG == 1:
 			#-Update storage in lakes/reservoirs (m3) with specific runoff
@@ -1317,14 +1316,7 @@ class sphy(pcrm.DynamicModel):
 				#-Reporting for each glacier ID
 				if self.GlacID_flag:
 					GlacTable_GLACid = self.GlacTable.loc[:, self.GlacVars]
-					
-# 					##????????????
-# 					if self.GlacRetreat == 1: #-if glacier retreat is calculated, then also monitor ice depth balance ( + snowstore) and area
-# 						#----> Option would be to incldue ICE_DEPTH in the cfg in the list of to report variables. Then this part can be skipped because it's then part of the self.GlacVars
-# 						GlacTable_GLACid['ICE_DEPTH'] = self.GlacTable['ICE_DEPTH']
-# 						
-# 					###????????????
-						
+
 					#-Muliply with fraction, summarize, and divide by total fraction to get glacier ID average 
 					GlacTable_GLACid = GlacTable_GLACid.multiply(self.GlacTable['FRAC_GLAC'], axis='index')  #-Multiply with fraction
 					GlacTable_GLACid['GLAC_ID'] = self.GlacTable['GLAC_ID']; GlacTable_GLACid['FRAC_GLAC'] = self.GlacTable['FRAC_GLAC']  #-Add GLAC_ID column and FRAC_GLAC column
@@ -1418,7 +1410,7 @@ class sphy(pcrm.DynamicModel):
 					GlacFracTable['V_ice_t2'] = pcr.numpy.maximum(0., GlacFracTable['V_ice_t1'] + GlacFracTable['Ice_redist'])
 					#-Update ice thickness
 					GlacFracTable['ICE_DEPTH_new'] = GlacFracTable['V_ice_t2'] / (GlacFracTable['FRAC_GLAC'] * self.cellArea)
-					noIceMask = (GlacFracTable['ICE_DEPTH_new'] <=0.)
+					noIceMask = (GlacFracTable['ICE_DEPTH_new'] <=0.)  # it can be that melt is greater than total available ice: that results in balance error
 					#-Update glacier fraction
 					GlacFracTable['FRAC_GLAC_new'] = GlacFracTable['FRAC_GLAC']
 					GlacFracTable.loc[noIceMask,'FRAC_GLAC_new'] = 0.
@@ -1430,6 +1422,11 @@ class sphy(pcrm.DynamicModel):
 					self.GlacTable['SnowStore_GLAC'] = 0.
 					self.GlacTable['SnowWatStore_GLAC'] = 0.
 					self.GlacTable['TotalSnowStore_GLAC'] = 0.
+					
+					#-remove SnowWatStore_GLAC from total snowwat
+					#self.report(TotalSnowStore_GLAC, self.outpath + 'SStGlac')
+					self.TotalSnowStore = self.TotalSnowStore - TotalSnowStore_GLAC
+					
 					#-Set accumulated glacier melt to zero as initial condition for next period
 					self.GlacTable['AccuGlacMelt'] = 0.
 					#-Remove the GlacFracTable
@@ -1477,6 +1474,52 @@ class sphy(pcrm.DynamicModel):
 					#-Delete variables that are not needed
 					glacArea = None; del glacArea; iceDepth = None; del iceDepth; GlacTable_MODid = None; del GlacTable_MODid
 
+		#-Water balance
+		if self.GlacFLAG and self.GlacRetreat == 1:
+			GlacTable_MODid = self.GlacTable.loc[:,['FRAC_GLAC', 'ICE_DEPTH']]
+			GlacTable_MODid['ICE_DEPTH'] = GlacTable_MODid['ICE_DEPTH'] * GlacTable_MODid['FRAC_GLAC']
+			GlacTable_MODid = GlacTable_MODid.groupby(GlacTable_MODid.index).sum()
+			GlacTable_MODid.fillna(0., inplace=True)
+			#-Report pcraster map of glacier depth
+			iceDepth = pcr.numpy.zeros(self.ModelID_1d.shape)
+			iceDepth[self.GlacierKeys] = GlacTable_MODid['ICE_DEPTH']
+			iceDepth = iceDepth.reshape(self.ModelID.shape)
+			iceDepth = pcr.numpy2pcr(Scalar, iceDepth, self.MV)
+			iceDepth = pcr.ifthen(self.clone, iceDepth)  #-only use values where clone is True
+			iceDepth = iceDepth * 1000 # in mm
+			#-change in storage
+			dS = ((self.RootWater - self.oldRootWater) + (self.SubWater - self.oldSubWater)) * (1-self.GlacFrac) + (self.Gw - self.oldGw) + \
+				(self.TotalSnowStore-OldTotalSnowStore) + (iceDepth - self.oldIceDepth)
+			#-set old state variables for glacier
+			self.oldIceDepth = iceDepth; iceDepth = None; del iceDepth;
+			GlacTable_MODid = None; del GlacTable_MODid;
+		elif self.GroundFLAG:
+			#-change in storage
+			dS = ((self.RootWater - self.oldRootWater) + (self.SubWater - self.oldSubWater)) * (1-self.GlacFrac) + (self.Gw - self.oldGw) + \
+				(self.TotalSnowStore-OldTotalSnowStore)
+			# set old state variables for groundwater
+			self.oldGw = self.Gw
+		else:
+			#-change in storage
+			dS = ((self.RootWater - self.oldRootWater) + (self.SubWater - self.oldSubWater)) * (1-self.GlacFrac) + (self.TotalSnowStore-OldTotalSnowStore)
+		#-water balance per time step
+		if self.GroundFLAG:
+			waterbalance = Precip - ActETact - self.BaseR - RainR - SnowR - GlacR - dS
+		else:
+			waterbalance = Precip - ActETact - self.BaseR - RainR - SnowR - dS - self.SeePage
+		self.report(waterbalance, self.outpath + 'wbal')
+		#-total water balance
+		self.waterbalanceTot = self.waterbalanceTot + waterbalance
+		self.report(self.waterbalanceTot, self.outpath + 'wbalT')
+		#-report water balance and accumulated water balance
+		self.wbalTSS.sample(pcr.catchmenttotal(waterbalance, self.FlowDir) / pcr.catchmenttotal(1., self.FlowDir))
+		self.wbalTotTSS.sample(pcr.catchmenttotal(self.waterbalanceTot, self.FlowDir) / pcr.catchmenttotal(1., self.FlowDir))
+		# set old state variables
+		self.oldRootWater = self.RootWater
+		self.oldSubWater = self.SubWater
+		waterbalance = None; del waterbalance; dS = None; del dS;
+		#-End of wate balance calculations
+			
 		#-update current date				
 		self.curdate = self.curdate + self.datetime.timedelta(days=1)
 		
