@@ -17,15 +17,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Email: w.terink@futurewater.nl OR terinkw@gmail.com
+# Email: terinkw@gmail.com
 
 #-Authorship information-###################################################################
 __author__ = "Wilco Terink"
 __copyright__ = "Wilco Terink"
 __license__ = "GPL"
-__version__ = "2.1"
-__email__ = "w.terink@futurewater.nl, terinkw@gmail.com"
-__date__ ='1 January 2017'
+__version__ = "2.2"
+__email__ = "terinkw@gmail.com"
+__date__ ='23 December 2017'
 ############################################################################################
 
 print 'glacier module imported'
