@@ -630,14 +630,22 @@ class sphy(pcrm.DynamicModel):
 				self.QGLACSubBasinTSS = pcrm.TimeoutputTimeseries("QGLACSubBasinTSS", self, self.Locations, noHeader=False)
 				self.QBASFSubBasinTSS = pcrm.TimeoutputTimeseries("QBASFSubBasinTSS", self, self.Locations, noHeader=False)
 				self.QTOTSubBasinTSS = pcrm.TimeoutputTimeseries("QTOTSubBasinTSS", self, self.Locations, noHeader=False)
+
 			#-Initialize reporting per glacier ID
 			self.GlacID_flag = config.getint('REPORTING', 'GlacID_flag')
 			if self.GlacID_flag:
 				self.GlacVars = config.get('REPORTING', 'GlacID_report').split(',')  #-get the variables to report
 				glacid = sorted(self.GlacTable['GLAC_ID'].unique())  #-get the unique glacier ids
 				drange = pd.date_range(self.startdate, self.enddate, freq='D')
-				for p in self.GlacVars: #-make panda dataframes for each variable to report
-					setattr(self, p + '_Table', pd.DataFrame(index = drange, columns=glacid,dtype=float))  #-create table for each variable to report
+# 				for p in self.GlacVars: #-make panda dataframes for each variable to report
+# 					setattr(self, p + '_Table', pd.DataFrame(index = drange, columns=glacid,dtype=float))  #-create table for each variable to report
+# 				for p in self.GlacVars:
+# 					df = pd.DataFrame(index=drange, columns=glacid, dtype=float)
+# 					df.to_csv(self.outpath + p + '.csv')
+			
+# 			exit(0)
+
+
 		elif self.SnowFLAG == 1:
 			if self.GroundFLAG == 1:		
 				pars = ['wbal','GWL','TotPrec','TotPrecE','TotInt','TotRain','TotETpot','TotETact','TotSnow','TotSnowMelt','TotRootR','TotRootD','TotRootP',\
@@ -1326,13 +1334,26 @@ class sphy(pcrm.DynamicModel):
 					GlacTable_GLACid['FRAC_GLAC'] = FracSum; FracSum = None; del FracSum  
 					GlacTable_GLACid = GlacTable_GLACid.transpose()  #-Transpose the glacier id table (ID as columns and vars as index)
 					GlacTable_GLACid.fillna(0., inplace=True);
-					#-Fill Glacier variable tables for reporting
+					
+# 					#-Fill Glacier variable tables for reporting
+# 					for v in self.GlacVars:
+# 						vv = getattr(self, v + '_Table'); vv.loc[self.curdate,:] = GlacTable_GLACid.loc[v,:]
+# 					v = None; vv = None; del v, vv; GlacTable_GLACid = None; del GlacTable_GLACid
+# 					if self.curdate == self.enddate: #-do the reporting at the final model time-step
+# 						for v in self.GlacVars:
+# 							eval('self.' + v + '_Table.to_csv("'  + self.outpath + v + '.csv")')
+					
+					glacid = sorted(self.GlacTable['GLAC_ID'].unique())
+					df = pd.DataFrame(columns=glacid, dtype=float)
+					glacid = None; del glacid
 					for v in self.GlacVars:
-						vv = getattr(self, v + '_Table'); vv.loc[self.curdate,:] = GlacTable_GLACid.loc[v,:]
-					v = None; vv = None; del v, vv; GlacTable_GLACid = None; del GlacTable_GLACid
-					if self.curdate == self.enddate: #-do the reporting at the final model time-step
-						for v in self.GlacVars:
-							eval('self.' + v + '_Table.to_csv("'  + self.outpath + v + '.csv")')
+						#df = pd.DataFrame(columns=glacid, dtype=float)
+						df.loc[self.curdate,:] = GlacTable_GLACid.loc[v,:]
+						if self.curdate == self.startdate:
+							df.to_csv(self.outpath + v + '.csv', mode='w')
+						else:
+							df.to_csv(self.outpath + v + '.csv', mode='a', header=False) #-no header for time-step > 1
+					df = None; del df; GlacTable_GLACid = None; del GlacTable_GLACid
 
 				#-Check if glacier retreat should be calculated
 				if self.GlacRetreat == 1 and self.curdate.month == self.GlacUpdate['month'] and self.curdate.day == self.GlacUpdate['day']:
