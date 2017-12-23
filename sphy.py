@@ -36,6 +36,8 @@ import pcraster as pcr
 import pcraster.framework as pcrm
 from pcraster._pcraster import Scalar
 
+import numpy as np
+
 tic = time.clock()
 
 # Read the model configuration file
@@ -637,13 +639,13 @@ class sphy(pcrm.DynamicModel):
 				self.GlacVars = config.get('REPORTING', 'GlacID_report').split(',')  #-get the variables to report
 				glacid = sorted(self.GlacTable['GLAC_ID'].unique())  #-get the unique glacier ids
 				drange = pd.date_range(self.startdate, self.enddate, freq='D')
-# 				for p in self.GlacVars: #-make panda dataframes for each variable to report
-# 					setattr(self, p + '_Table', pd.DataFrame(index = drange, columns=glacid,dtype=float))  #-create table for each variable to report
-# 				for p in self.GlacVars:
-# 					df = pd.DataFrame(index=drange, columns=glacid, dtype=float)
-# 					df.to_csv(self.outpath + p + '.csv')
-			
-# 			exit(0)
+				for p in self.GlacVars: #-make panda dataframes for each variable to report
+					setattr(self, p + '_Table', pd.DataFrame(index = drange, columns=glacid,dtype=np.float32))  #-create table for each variable to report
+					
+# 					print eval('self.' + p + '_Table.memory_usage(deep=True).sum()')
+# 					print 'pd.to_numeric(self.' + p + '_Table, downcast="'"float"'")'
+# 					eval('pd.to_numeric(self.' + p + '_Table, downcast="'"float"'")')
+# 					print eval('self.' + p + '_Table.memory_usage(deep=True).sum()')
 
 
 		elif self.SnowFLAG == 1:
@@ -1335,25 +1337,34 @@ class sphy(pcrm.DynamicModel):
 					GlacTable_GLACid = GlacTable_GLACid.transpose()  #-Transpose the glacier id table (ID as columns and vars as index)
 					GlacTable_GLACid.fillna(0., inplace=True);
 					
-# 					#-Fill Glacier variable tables for reporting
-# 					for v in self.GlacVars:
-# 						vv = getattr(self, v + '_Table'); vv.loc[self.curdate,:] = GlacTable_GLACid.loc[v,:]
-# 					v = None; vv = None; del v, vv; GlacTable_GLACid = None; del GlacTable_GLACid
-# 					if self.curdate == self.enddate: #-do the reporting at the final model time-step
-# 						for v in self.GlacVars:
-# 							eval('self.' + v + '_Table.to_csv("'  + self.outpath + v + '.csv")')
-					
-					glacid = sorted(self.GlacTable['GLAC_ID'].unique())
-					df = pd.DataFrame(columns=glacid, dtype=float)
-					glacid = None; del glacid
+					#-Fill Glacier variable tables for reporting
 					for v in self.GlacVars:
-						#df = pd.DataFrame(columns=glacid, dtype=float)
-						df.loc[self.curdate,:] = GlacTable_GLACid.loc[v,:]
-						if self.curdate == self.startdate:
-							df.to_csv(self.outpath + v + '.csv', mode='w')
-						else:
-							df.to_csv(self.outpath + v + '.csv', mode='a', header=False) #-no header for time-step > 1
-					df = None; del df; GlacTable_GLACid = None; del GlacTable_GLACid
+						vv = getattr(self, v + '_Table'); vv.loc[self.curdate,:] = GlacTable_GLACid.loc[v,:]
+						
+# 						#print vv.memory_usage(deep=True).sum()
+# 						print vv.info(memory_usage = 'deep')
+# 						pd.to_numeric(vv, downcast='float')
+# # 						print vv.memory_usage(deep=True).sum()
+# 						print vv.info(memory_usage = 'deep')
+# 
+# 						exit(0)
+						
+					v = None; vv = None; del v, vv; GlacTable_GLACid = None; del GlacTable_GLACid
+					if self.curdate == self.enddate: #-do the reporting at the final model time-step
+						for v in self.GlacVars:
+							eval('self.' + v + '_Table.to_csv("'  + self.outpath + v + '.csv")')
+					
+# 					glacid = sorted(self.GlacTable['GLAC_ID'].unique())
+# 					df = pd.DataFrame(columns=glacid, dtype=float)
+# 					glacid = None; del glacid
+# 					for v in self.GlacVars:
+# 						#df = pd.DataFrame(columns=glacid, dtype=float)
+# 						df.loc[self.curdate,:] = GlacTable_GLACid.loc[v,:]
+# 						if self.curdate == self.startdate:
+# 							df.to_csv(self.outpath + v + '.csv', mode='w')
+# 						else:
+# 							df.to_csv(self.outpath + v + '.csv', mode='a', header=False) #-no header for time-step > 1
+# 					df = None; del df; GlacTable_GLACid = None; del GlacTable_GLACid
 
 				#-Check if glacier retreat should be calculated
 				if self.GlacRetreat == 1 and self.curdate.month == self.GlacUpdate['month'] and self.curdate.day == self.GlacUpdate['day']:
