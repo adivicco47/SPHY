@@ -81,9 +81,6 @@ class sphy(pcrm.DynamicModel):
 		if self.GlacFLAG == 1:
 			self.SnowFLAG = 1
 			self.GroundFLAG = 1
-# 			import glacier # glacier melting processes
-# 			self.glacier = glacier
-# 			del glacier
 		if self.SnowFLAG == 1:
 			import snow # snow melt processes
 			self.snow = snow
@@ -389,7 +386,6 @@ class sphy(pcrm.DynamicModel):
 				self.ResAdvanced = False
 	
 	def initial(self):
-
 		#-initial section
 		#-get the correct forcing file number, depending on the start date of your simulation
 		#-and the start date of the first forcing file in your forcing directory.
@@ -631,7 +627,6 @@ class sphy(pcrm.DynamicModel):
 				self.QGLACSubBasinTSS = pcrm.TimeoutputTimeseries("QGLACSubBasinTSS", self, self.Locations, noHeader=False)
 				self.QBASFSubBasinTSS = pcrm.TimeoutputTimeseries("QBASFSubBasinTSS", self, self.Locations, noHeader=False)
 				self.QTOTSubBasinTSS = pcrm.TimeoutputTimeseries("QTOTSubBasinTSS", self, self.Locations, noHeader=False)
-
 			#-Initialize reporting per glacier ID
 			self.GlacID_flag = config.getint('REPORTING', 'GlacID_flag')
 			if self.GlacID_flag:
@@ -642,7 +637,6 @@ class sphy(pcrm.DynamicModel):
 					drange = pd.date_range(self.startdate, self.enddate, freq='D')
 					for p in self.GlacVars: #-make panda dataframes for each variable to report
 						setattr(self, p + '_Table', pd.DataFrame(index = drange, columns=self.glacid,dtype=np.float32))  #-create table for each variable to report
-
 		elif self.SnowFLAG == 1:
 			if self.GroundFLAG == 1:		
 				pars = ['wbal','GWL','TotPrec','TotPrecE','TotInt','TotRain','TotETpot','TotETact','TotSnow','TotSnowMelt','TotRootR','TotRootD','TotRootP',\
@@ -772,7 +766,7 @@ class sphy(pcrm.DynamicModel):
 				self.ResBaseOutTSS = pcrm.TimeoutputTimeseries("ResBaseOutTSS", self, self.ResID, noHeader=True)
 				self.ResBaseStorTSS = pcrm.TimeoutputTimeseries("ResBaseStorTSS", self, self.ResID, noHeader=True)
 				
-		#-implemented on 2017-06-26 for calculating water balance
+		#-WATER BALANCE
 		self.oldRootWater = self.RootWater
 		self.oldSubWater = self.SubWater
 		if self.GroundFLAG:
@@ -971,7 +965,6 @@ class sphy(pcrm.DynamicModel):
 			#-Report glacier melt
 			self.reporting.reporting(self, pcr, 'TotGlacMelt', GlacMelt)
 			if self.mm_rep_FLAG == 1 and (self.RoutFLAG == 1 or self.ResFLAG == 1 or self.LakeFLAG == 1):
-				#self.GMeltSubBasinTSS.sample(pcr.catchmenttotal(GlacMelt * self.GlacFrac, self.FlowDir) / pcr.catchmenttotal(1, self.FlowDir))
 				self.GMeltSubBasinTSS.sample(pcr.catchmenttotal(GlacMelt, self.FlowDir) / pcr.catchmenttotal(1, self.FlowDir))
 			#-Glacier runoff
 			GlacR = pcr.numpy.zeros(self.ModelID_1d.shape)
@@ -1440,8 +1433,7 @@ class sphy(pcrm.DynamicModel):
 					self.GlacTable['SnowWatStore_GLAC'] = 0.
 					self.GlacTable['TotalSnowStore_GLAC'] = 0.
 					
-					#-remove SnowWatStore_GLAC from total snowwat
-					#self.report(TotalSnowStore_GLAC, self.outpath + 'SStGlac')
+					#-remove SnowWatStore_GLAC from total snowstore
 					self.TotalSnowStore = self.TotalSnowStore - TotalSnowStore_GLAC
 					
 					#-Set accumulated glacier melt to zero as initial condition for next period
