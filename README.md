@@ -3,10 +3,12 @@
 
 The Spatial Processes in Hydrology (SPHY) model is a hydrological modeling tool suitable for a wide range of water resource management applications. SPHY is a state-of-the-art, easy to use, robust tool, that can be applied for operational as well as strategic decision support. The SPHY model has been applied and tested in various studies ranging from real-time soil moisture predictions in flat lands, to operational reservoir inflow forecasting applications in mountainous catchments, irrigation scenarios in the Nile Basin, and detailed climate change impact studies in the snow- and glacier-melt dominated the Himalayan region.
 
-<img src="https://github.com/WilcoTerink/SPHY/blob/SPHY2.2/glacier_mass_balance.jpg" alt="Example of annual glacier mass balance" height="300" width="300"><img src="https://github.com/WilcoTerink/SPHY/blob/SPHY2.0/SPHY_concepts.jpg" alt="SPHY model concepts" height="400" width="400">
+<img src="https://github.com/WilcoTerink/SPHY/blob/SPHY2.0/SPHY_concepts.jpg" alt="SPHY model concepts" height="400" width="400">
 
 <b>Changes with respect to version 2.1</b></br>
 Glaciers in version 2.1 and 2.0 were not mass conserving. In previous versions they were implemented as a fixed mass generating glacier melt using a degree day factor. This new release accounts for rainfall and snowfall onto the glacier, accumulation and melt of snow, and redistribution of ice from the accumulation to the ablation zone. These modifications allow glaciers to retreat over time if the melt rate is higher than the accumulation rate. Details and an example application can be found in <a href="https://github.com/WilcoTerink/SPHY/blob/SPHY2.2/SPHY2.2 mass conserving glacier module.pptx">Concepts and application of the mass conserving glacier module</a>.
+
+<img src="https://github.com/WilcoTerink/SPHY/blob/SPHY2.2/glacier_mass_balance.jpg" alt="Example of annual glacier mass balance" height="400" width="400">
 
 <b>SPHY model user group</b></br>
 A user group for the SPHY model is available in <a href="https://groups.google.com/forum/#!forum/sphy-model-user" target="_blank">Google Groups</a>. You can use this group to post Questions and Answers related to the source code, available plugins, input and output formats, calibration, applications, and suggestions for improvements.
