@@ -19,7 +19,10 @@ A user group for the SPHY model is available in <a href="https://groups.google.c
 
 <li><a href="https://github.com/WilcoTerink/SPHY/blob/SPHY2.0/SPHY_GUIs.pdf" target="_blank">Terink, W., A.F. Lutz, W.W. Immerzeel. 2015. SPHY: Spatial Processes in HYdrology. Graphical User-Interfaces (GUIs). FutureWater Report 143.</a></li>
 
+<li><a href="https://www.sciencedirect.com/science/article/pii/S002216941830372X" target="_blank">Terink, W., H. Leijnse, G.A.P. van den Eertwegh, R. Uijlenhoet. 2018. Spatial resolutions in areal rainfall estimation and their impact on hydrological simulations of a lowland catchment. Journal of Hydrology - Volume 563 - Pages 319-335. DOI: 10.1016/j.jhydrol.2018.05.045.</a></li> 
 </ul>
+
+
 
 
 <b>Copyright</b></br>
