@@ -25,6 +25,7 @@ A user group for the SPHY model is available in <a href="https://groups.google.c
 
 <li><a href="https://github.com/WilcoTerink/SPHY/blob/SPHY2.1/SPHY_reservoir_module.pdf" target="_blank">Terink, W., P. Droogers, G.W.H. Simons. 2015. Reservoir module in SPHY. Implemented in SPHY v2.1 FutureWater Report 136.</a></li>
 
+<li><a href="https://www.sciencedirect.com/science/article/pii/S002216941830372X" target="_blank">Terink, W., H. Leijnse, G.A.P. van den Eertwegh, R. Uijlenhoet. 2018. Spatial resolutions in areal rainfall estimation and their impact on hydrological simulations of a lowland catchment. Journal of Hydrology - Volume 563 - Pages 319-335. DOI: 10.1016/j.jhydrol.2018.05.045.</a></li>
 </ul>
 
 <b>Copyright</b></br>
