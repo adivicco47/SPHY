@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+#
 # The Spatial Processes in HYdrology (SPHY) model:
 # A spatially distributed hydrological model that calculates soil-water and
 # cryosphere processes on a cell-by-cell basis.
@@ -17,15 +19,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Email: w.terink@futurewater.nl OR terinkw@gmail.com
+# Email: terinkw@gmail.com
 
 #-Authorship information-###################################################################
 __author__ = "Wilco Terink"
 __copyright__ = "Wilco Terink"
 __license__ = "GPL"
-__version__ = "2.1"
-__email__ = "w.terink@futurewater.nl, terinkw@gmail.com"
-__date__ ='1 January 2017'
+__version__ = "2.0"
+__email__ = "terinkw@gmail.com"
+__date__ ='16 October 2018'
 ############################################################################################
 
 print 'snow module imported'
@@ -41,7 +43,7 @@ def ActSnowMelt(pcr, snowstore, potmelt):
 
 #-Function that updates the snow storage
 def SnowStoreUpdate(pcr, snowstore, snow, actmelt, temp, snowwatstore):
-    snowstore = snowstore + snow - actmelt + pcr.ifthenelse(temp < 0, pcr.scalar(snowwatstore), 0)
+    snowstore = snowstore + snow - actmelt + pcr.ifthenelse(temp <= 0, pcr.scalar(snowwatstore), 0)
     return snowstore
 
 #-Function that determines the maximum amount of water that can be stored in the snowpack
@@ -51,7 +53,7 @@ def MaxSnowWatStorage(snowsc, snowstore):
 
 #-Function to calculate the actual snow water storage 
 def SnowWatStorage(pcr, temp, maxsnowwatstore, snowwatstore, actmelt, rain):
-    snowwatstore = pcr.ifthenelse(temp < 0, 0, pcr.min(maxsnowwatstore, snowwatstore + actmelt + rain))
+    snowwatstore = pcr.ifthenelse(temp <= 0, 0, pcr.min(maxsnowwatstore, snowwatstore + actmelt + rain))
     return snowwatstore
 
 #-Function to calculate the total snow storage (snowstore + snowwatstore)
