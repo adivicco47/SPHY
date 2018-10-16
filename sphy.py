@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+#
 # The Spatial Processes in HYdrology (SPHY) model:
 # A spatially distributed hydrological model that calculates soil-water and
 # cryosphere processes on a cell-by-cell basis.
@@ -17,15 +19,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Email: w.terink@futurewater.nl OR terinkw@gmail.com
+# Email: terinkw@gmail.com
 
 #-Authorship information-###################################################################
 __author__ = "Wilco Terink"
 __copyright__ = "Wilco Terink"
 __license__ = "GPL"
 __version__ = "2.0"
-__email__ = "w.terink@futurewater.nl, terinkw@gmail.com"
-__date__ ='1 January 2017'
+__email__ = "terinkw@gmail.com"
+__date__ ='16 October 2018'
 ############################################################################################
 
 # This model uses the sphy_config.cfg as configuration file.
@@ -54,7 +56,6 @@ class sphy(pcrm.DynamicModel):
 		self.RoutFLAG = config.getint('MODULES','RoutFLAG')
 		self.ResFLAG = config.getint('MODULES','ResFLAG')
 		self.DynVegFLAG = config.getint('MODULES','DynVegFLAG')
-		self.IrriFLAG = config.getint('MODULES','IrriFLAG')
 		self.GroundFLAG = config.getint('MODULES','GroundFLAG')
 		
 		# import the required modules
@@ -94,10 +95,6 @@ class sphy(pcrm.DynamicModel):
 			import dynamic_veg # dynamic crop growth using ndvi or kc time-series
 			self.dynamic_veg = dynamic_veg
 			del dynamic_veg
-		if self.IrriFLAG == 1:
-			import irrigation # irrigation module
-			self.irrigation = irrigation
-			del irrigation
 		if self.GroundFLAG == 1:
 			import groundwater # groundwater storage as third storage layer. This is used instead of a fixed bottomflux
 			self.groundwater = groundwater

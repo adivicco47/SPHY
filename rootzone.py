@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+#
 # The Spatial Processes in HYdrology (SPHY) model:
 # A spatially distributed hydrological model that calculates soil-water and
 # cryosphere processes on a cell-by-cell basis.
@@ -17,15 +19,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Email: w.terink@futurewater.nl OR terinkw@gmail.com
+# Email: terinkw@gmail.com
 
 #-Authorship information-###################################################################
 __author__ = "Wilco Terink"
 __copyright__ = "Wilco Terink"
 __license__ = "GPL"
 __version__ = "2.0"
-__email__ = "w.terink@futurewater.nl, terinkw@gmail.com"
-__date__ ='1 January 2017'
+__email__ = "terinkw@gmail.com"
+__date__ ='16 October 2018'
 ############################################################################################
 
 #-Function to calculate rootzone runoff
